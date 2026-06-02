@@ -22,23 +22,27 @@ def to_excel(df_streams, df_comps, econ_summary):
 def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    pdf.set_font("Helvetica", "B", 16)
     pdf.cell(40, 10, "Pinch Point Analysis - Industrial Executive Report")
     pdf.ln(20)
-    pdf.set_font("Arial", "", 12)
+    pdf.set_font("Helvetica", "", 12)
     pdf.cell(40, 10, f"Pinch Temperature (Hot/Cold): {pinch_h} C / {pinch_c} C")
     pdf.ln(10)
     pdf.cell(40, 10, f"Minimum Hot Utility Required: {qh:,.1f} kW")
     pdf.ln(10)
     pdf.cell(40, 10, f"Minimum Cold Utility Required: {qc:,.1f} kW")
     pdf.ln(20)
-    pdf.set_font("Arial", "B", 14)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.cell(40, 10, "Economic Targeting Summary")
     pdf.ln(10)
-    pdf.set_font("Arial", "", 12)
+    pdf.set_font("Helvetica", "", 12)
+    
+    # Αντικατάσταση του συμβόλου € με 'EUR' για την αποφυγή του Unicode Error
     for key, val in econ_summary.items():
-        pdf.cell(40, 10, f"{key}: {val}")
+        clean_val = str(val).replace("€", "EUR ")
+        pdf.cell(40, 10, f"{key}: {clean_val}")
         pdf.ln(10)
+        
     return pdf.output()
 
 # --- SIDEBAR CONFIGURATION & ECONOMIC INPUTS ---
