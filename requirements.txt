@@ -1,4 +1,6 @@
 streamlit
-pandas
-matplotlib
 numpy
+matplotlib
+pandas
+openpyxl
+fpdf2
