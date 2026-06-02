@@ -82,7 +82,25 @@ col_table1, col_table2 = st.columns(2)
 
 with col_table1:
     st.subheader("📋 1. Process Streams Data")
-    edited_df = st.data_editor(st.session_state["streams_data"], num_rows="dynamic", use_container_width=True, key="streams_editor")
+    
+    # NEW: Using st.column_config.SelectboxColumn to enforce dropdown choices instead of typing
+    edited_df = st.data_editor(
+        st.session_state["streams_data"], 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        key="streams_editor",
+        column_config={
+            "Stream Name": st.column_config.TextColumn("Stream Name"),
+            "Tin (°C)": st.column_config.NumberColumn("Tin (°C)"),
+            "Tout (°C)": st.column_config.NumberColumn("Tout (°C)"),
+            "Input Mode": st.column_config.SelectboxColumn(
+                "Input Mode", 
+                options=["Heat Load (kW)", "Cp (kW/°C)"],
+                required=True
+            ),
+            "Value": st.column_config.NumberColumn("Value")
+        }
+    )
 
 with col_table2:
     st.subheader("⚡ 2. Other Process Components")
@@ -160,20 +178,21 @@ try:
     pinch_cold = intervals[pinch_index] - dT_min / 2
 except Exception:
     pinch_hot, pinch_cold = "N/A", "N/A"
+
+total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
+total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
+
 # --- FINANCIAL ACCELERATION LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
 annual_savings = op_cost_before - op_cost_after
 
-# Dynamically count pure user hot and cold stream categories
 hot_st = [n for n in stream_names_list if streams[n]["type"] == "Hot"]
 cold_st = [n for n in stream_names_list if streams[n]["type"] == "Cold"]
 
-# Base plant CAPEX requires an exchanger for every single stream (Heaters & Coolers)
 base_hex_count = len(stream_names_list)
 capex_base = (base_hex_count * fixed_hex_cost) + (estimated_area_base * area_cost_coeff)
 
-# Integrated plant CAPEX requires 1 process exchanger per valid hot/cold combination pair
 hx_process_count = min(len(hot_st), len(cold_st))
 integrated_total_hex = hx_process_count + base_hex_count 
 capex_integrated = (integrated_total_hex * fixed_hex_cost) + (estimated_area_integrated * area_cost_coeff)
@@ -233,7 +252,6 @@ with tab2:
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-    # GCC PERFECT FIX: Single standalone baseline vectors mapped explicitly outside loops
     ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
     ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
     
@@ -248,13 +266,11 @@ with tab3:
     fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    # Draw process streams horizontally
     for name, s in streams.items():
         y = y_pos[name]
         ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
         ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
         
-        # Display dynamic input/output temperatures at utility boundaries explicitly
         ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
         ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
         
@@ -263,11 +279,9 @@ with tab3:
         else:
             ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-    # --- DYNAMIC PROCESS-TO-PROCESS CONNECTIONS BASE LINE ---
     for i in range(hx_process_count):
         h_name, c_name = hot_st[i], cold_st[i]
         y_h, y_c = y_pos[h_name], y_pos[c_name]
-        # Draw clean pairing line mid-scale vertically
         mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
         ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
         ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
@@ -276,7 +290,6 @@ with tab3:
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
         ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
     
-    # Custom Consolidated Legend Matrix
     from matplotlib.lines import Line2D
     custom_legend = [
         Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
@@ -316,9 +329,8 @@ with tab4:
 with tab5:
     st.subheader("💰 Isolated 5-Year Financial Asset Horizons")
     col_g1, col_g2 = st.columns(2)
-    years_range = list(range(0, 6)) # 5-year timeline matrix (0 to 5)
+    years_range = list(range(0, 6))
     
-    # Financial tracking vectors formulation
     base_capex_vector = [capex_base] * len(years_range)
     base_opex_vector = [op_cost_before * y for y in years_range]
     
