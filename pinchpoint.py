@@ -205,20 +205,43 @@ with tab3:
 with tab4:
     st.subheader("Κατανομή Ενεργειακών Απαιτήσεων βάσει των Δυναμικών Εξαρτημάτων")
     
-    labels = ['Θέρμανση Ρευμάτων (Hot Utilities)'] + [c["name"] for c in other_components]
-    sizes_before = [total_cold_load / 1000] + [c["mw"] for c in other_components]
-    sizes_after = [qh_min / 1000] + [c["mw"] for c in other_components]
+    # 1. Δημιουργία λίστας με τα ονόματα (Labels)
+    labels = ['Hot Utilities (Θέρμανση)', 'Cold Utilities (Ψύξη)'] + [c["name"] for c in other_components]
+    
+    # 2. Υπολογισμός τιμών (Sizes) σε MW
+    # ΠΡΙΝ την ολοκλήρωση
+    sizes_before = [total_cold_load / 1000, total_hot_load / 1000] + [c["mw"] for c in other_components]
+    # ΜΕΤΑ την ολοκλήρωση
+    sizes_after = [qh_min / 1000, qc_min / 1000] + [c["mw"] for c in other_components]
     
     total_before = sum(sizes_before)
     total_after = sum(sizes_after)
     
-    fig_pie, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    # 3. Ορισμός σταθερών χρωμάτων για να ταιριάζουν με τη φωτογραφία σας
+    # Hot Utilities = Κόκκινο, Cold Utilities = Μπλε, και τυχαία χρώματα για τα υπόλοιπα δυναμικά εξαρτήματα
+    colors_map = ['#FF0000', '#0070C0', '#FFC000', '#7030A0', '#ED7D31', '#70AD47']
+    # Αν ο χρήστης προσθέσει περισσότερα εξαρτήματα, συμπληρώνουμε με επιπλέον χρώματα
+    if len(labels) > len(colors_map):
+        colors_map += plt.cm.Accent(np.linspace(0, 1, len(labels) - len(colors_map))).tolist()
+    current_colors = colors_map[:len(labels)]
     
-    ax1.pie(sizes_before, labels=labels, autopct='%1.1f%%', startangle=140)
-    ax1.set_title(f"ΠΡΙΝ την Ολοκλήρωση\n(Σύνολο: {total_before:.2f} MW)")
+    # 4. Σχεδίαση των δύο Pie Charts δίπλα-δίπλα
+    fig_pie, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
     
-    ax2.pie(sizes_after, labels=labels, autopct='%1.1f%%', startangle=140)
-    ax2.set_title(f"ΜΕΤΑ την Ολοκλήρωση\n(Σύνολο: {total_after:.2f} MW)")
+    # Πρώτη πίστα: ΠΡΙΝ
+    wedges1, texts1, autotexts1 = ax1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors, textprops=dict(color="black"))
+    ax1.set_title(f"Before Heat Integration\n(Total: {total_before:.2f} MW)", fontsize=14, weight='bold')
+    
+    # Δεύτερη πίτα: ΜΕΤΑ
+    wedges2, texts2, autotexts2 = ax2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors, textprops=dict(color="black"))
+    ax2.set_title(f"After Heat Integration\n(Total: {total_after:.2f} MW)", fontsize=14, weight='bold')
+    
+    # Κοινή ενιαία υπόμνηση (Legend) στο κάτω μέρος των γραφημάτων
+    fig_pie.legend(wedges1, labels, loc='lower center', bbox_to_anchor=(0.5, 0.02), ncol=3, fontsize=10)
+    plt.subplots_adjust(bottom=0.2) # Αφήνει χώρο για το legend
     
     st.pyplot(fig_pie)
+    
+    # Εμφάνιση αναλυτικών στοιχείων με κείμενο
     st.info(f"💡 Συνολική μείωση απαιτούμενης ισχύος της μονάδας: **{total_before - total_after:.2f} MW**")
+
