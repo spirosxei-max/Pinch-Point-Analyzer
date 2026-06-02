@@ -8,7 +8,7 @@ from fpdf import FPDF
 st.set_page_config(layout="wide")
 
 st.title("🔥 Enterprise Pinch Point Analyzer & HEN Synthesizer")
-st.write("Industrial Heat Exchanger Network Design with Isolated Cost Trajectories & Clean Grid Layouts")
+st.write("Industrial Heat Exchanger Network Design with Dynamic Cost Profiles & Clean Utility Layouts")
 
 # --- EXECUTIVE PDF REPORT GENERATION ---
 def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
@@ -48,7 +48,8 @@ op_hours = st.sidebar.number_input("Annual Operating Hours (hr/year)", value=800
 st.sidebar.subheader("🏗️ Capital Cost (HEN Installation)")
 fixed_hex_cost = st.sidebar.number_input("Fixed Cost per Exchanger (€)", value=10000)
 area_cost_coeff = st.sidebar.number_input("Area Cost Coefficient (€/m²)", value=400)
-estimated_area = st.sidebar.number_input("Estimated Total New Area needed (m²)", value=250)
+estimated_area_base = st.sidebar.number_input("Base System Area needed (m²)", value=150)
+estimated_area_integrated = st.sidebar.number_input("Integrated System Area needed (m²)", value=250)
 
 # --- INITIALIZATION (PURE BLANK STATE) ---
 st.header("📥 Data Initialization")
@@ -167,25 +168,31 @@ op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cool
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
 annual_savings = op_cost_before - op_cost_after
 
-# Simplified logic for pure custom inputs
+# Dynamic CAPEX: Base plant requires an exchanger for EVERY stream (Heaters & Coolers)
+base_hex_count = len(stream_names_list)
+capex_base = (base_hex_count * fixed_hex_cost) + (estimated_area_base * area_cost_coeff)
+
+# Integrated plant requires process exchangers + remaining utility units
 hx_process_count = max(1, len(stream_names_list) // 3)
-capex_investment = (hx_process_count * fixed_hex_cost) + (estimated_area * area_cost_coeff)
-payback_period_years = capex_investment / annual_savings if annual_savings > 0 else float('inf')
+integrated_total_hex = hx_process_count + 6 # Based on recovery framework
+capex_integrated = (integrated_total_hex * fixed_hex_cost) + (estimated_area_integrated * area_cost_coeff)
+
+payback_period_years = (capex_integrated - capex_base) / annual_savings if annual_savings > 0 else float('inf')
 
 econ_summary = {
     "Operating Cost Before Integration": f"€{op_cost_before:,.2f}/yr",
     "Operating Cost After Integration": f"€{op_cost_after:,.2f}/yr",
-    "Net Annual Operating Savings": f"€{annual_savings:,.2f}/yr",
-    "Estimated HEN Capital Investment (CAPEX)": f"€{capex_investment:,.2f}",
-    "Simple Payback Period": f"{payback_period_years:.2f} Years"
+    "Base System CAPEX Equipment Cost": f"€{capex_base:,.2f}",
+    "Integrated HEN Capital Investment (CAPEX)": f"€{capex_integrated:,.2f}",
+    "Simple Payback Period on Incremental Investment": f"{payback_period_years:.2f} Years"
 }
 
 # --- METRIC EXPOSURE ---
 st.header("📊 Performance Metrics")
 m1, m2, m3 = st.columns(3)
 m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C")
-m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Payback: {payback_period_years:.2f} yrs")
-m3.metric("Estimated Process Exchangers", f"{hx_process_count} Units")
+m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Incremental Payback: {payback_period_years:.2f} yrs")
+m3.metric("True Network Units (Base vs Integrated)", f"{base_hex_count} vs {integrated_total_hex} Units")
 
 # --- DOWNLOAD PIPELINE ---
 st.subheader("💾 Cloud Reporting Infrastructure")
@@ -226,7 +233,8 @@ with tab2:
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-    ax_gcc.plot([0, qh_min], [intervals, intervals], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
+    # GCC FIX: Strictly standalone lines outside loops to prevent duplicates
+    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
     ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
@@ -237,32 +245,42 @@ with tab2:
 
 with tab3:
     st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
-    fig_grid, ax_grid = plt.subplots(figsize=(12, 5))
+    fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    # Draw process streams horizontally for maximum legibility
+    # Plot process streams horizontally
     for name, s in streams.items():
         y = y_pos[name]
         ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
-        ax_grid.text(s["Tin"], y + 0.12, f"{name} (In: {s['Tin']}°C)", fontsize=9, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
-        ax_grid.text(s["Tout"], y + 0.12, f"Out: {s['Tout']}°C", fontsize=9, ha='left' if s["type"]=="Hot" else 'right')
+        ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
         
-        # Place standard markers at the stream ends to dynamically show necessary utility needs
+        # Display dynamic temperatures at the boundaries of utility exchangers
         if s["type"] == "Cold":
-            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=10, zorder=5)
-            ax_grid.text(s["Tout"], y - 0.25, "Heater (HU)", color="darkred", fontsize=8, ha="center")
+            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", ax_grid=None, markersize=12, label="Heater (HU)" if "Heater (HU)" not in ax_grid.get_legend_handles_labels()[1] else "", zorder=5)
+            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred", weight="bold")
         else:
-            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=10, zorder=5)
-            ax_grid.text(s["Tout"], y - 0.25, "Cooler (CU)", color="dodgerblue", fontsize=8, ha="center")
+            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", ax_grid=None, markersize=12, label="Cooler (CU)" if "Cooler (CU)" not in ax_grid.get_legend_handles_labels()[1] else "", zorder=5)
+            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="dodgerblue", weight="bold")
             
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
         ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
     
+    # Custom Unique Consolidated Legend at the bottom
+    from matplotlib.lines import Line22d
+    custom_legend = [
+        Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger', markerfacecolor='green', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
+    ]
+    ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
+    
     ax_grid.set_yticks(list(y_pos.values()))
     ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
     ax_grid.set_xlabel("Temperature Scale (°C)", weight="bold")
-    ax_grid.set_ylim(0.4, len(streams) + 0.6)
+    ax_grid.set_ylim(0.3, len(streams) + 0.6)
     ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
     st.pyplot(fig_grid)
 
@@ -288,38 +306,36 @@ with tab4:
     st.pyplot(fig_pie)
 
 with tab5:
-    st.subheader("💰 Financial Multi-Horizon Projections")
+    st.subheader("💰 Financial Multi-Horizon Asset Projections")
     col_g1, col_g2 = st.columns(2)
     years_range = np.arange(0, 11)
     
     with col_g1:
-        st.markdown("**1. Unintegrated Plant Financial Horizon (Base System)**")
-        # Line 1: CAPEX is 0, Line 2: Accumulating OPEX
-        base_capex_line = np.zeros(len(years_range))
-        base_opex_accum = op_cost_before * years_range
+        st.markdown("**1. Unintegrated Plant Financial Horizon (Base System Profile)**")
+        # Line 1: Real Equipment CAPEX base line, Line 2: Combined base burden
+        base_capex_vector = np.full(len(years_range), capex_base)
+        base_total_trajectory = capex_base + (op_cost_before * years_range)
         
         fig_l1, ax_l1 = plt.subplots(figsize=(9, 5))
-        ax_l1.plot(years_range, base_capex_line, color="gray", linestyle=":", label="Initial Hardware CAPEX (0 EUR)", lw=2)
-        ax_l1.plot(years_range, base_opex_accum, color="red", linestyle="-", marker="o", label="Cumulative Utility Spending (OPEX)", lw=2)
+        ax_l1.plot(years_range, base_capex_vector, color="gray", linestyle=":", label=f"Hardware Asset CAPEX (€{capex_base:,.0f})", lw=2)
+        ax_l1.plot(years_range, base_total_trajectory, color="red", linestyle="-", marker="o", label="Total Accumulation (CAPEX + Base OPEX)", lw=2)
         ax_l1.set_xlabel("Operating Horizon (Years)")
         ax_l1.set_ylabel("Financial Capital Required (€)")
-        ax_l1.set_title("Base Plant Cost Cumulative Profile")
         ax_l1.grid(True, linestyle=":", alpha=0.6)
         ax_l1.legend()
         st.pyplot(fig_l1)
         
     with col_g2:
-        st.markdown("**2. Integrated HEN Plant Financial Horizon (Optimized System)**")
-        # Line 1: Fixed CAPEX line, Line 2: Cumulative CAPEX + OPEX
-        int_capex_line = np.full(len(years_range), capex_investment)
-        int_total_accum = capex_investment + (op_cost_after * years_range)
+        st.markdown("**2. Integrated HEN Plant Financial Horizon (Optimized System Profile)**")
+        # Line 1: Upfront Fixed CAPEX integrated line, Line 2: Combined integrated burden
+        int_capex_vector = np.full(len(years_range), capex_integrated)
+        int_total_trajectory = capex_integrated + (op_cost_after * years_range)
         
-        fig_l2, ax_l2 = plt.subplots(figsize=(9, 5))
-        ax_l2.plot(years_range, int_capex_line, color="blue", linestyle=":", label=f"Upfront Fixed CAPEX (€{capex_investment:,.0f})", lw=2)
-        ax_l2.plot(years_range, int_total_accum, color="green", linestyle="-", marker="s", label="Total Combined Burden (CAPEX + OPEX)", lw=2.5)
+        fig_l2, ax_l2 = plt.subplots(figsize=(9, 5)) 
+        ax_l2.plot(years_range, int_capex_vector, color="blue", linestyle=":", label=f"Upfront Fixed CAPEX (€{capex_integrated:,.0f})", lw=2)
+        ax_l2.plot(years_range, int_total_trajectory, color="green", linestyle="-", marker="s", label="Total Combined Burden (CAPEX + Optimized OPEX)", lw=2.5)
         ax_l2.set_xlabel("Operating Horizon (Years)")
         ax_l2.set_ylabel("Financial Capital Required (€)")
-        ax_l2.set_title("Integrated System Investment Profile")
         ax_l2.grid(True, linestyle=":", alpha=0.6)
         ax_l2.legend()
         st.pyplot(fig_l2)
