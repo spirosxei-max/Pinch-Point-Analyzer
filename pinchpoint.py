@@ -248,7 +248,7 @@ with tab3:
     fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    # Plot process streams horizontally
+    # Draw process streams horizontally
     for name, s in streams.items():
         y = y_pos[name]
         ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
@@ -256,11 +256,11 @@ with tab3:
         
         # Display dynamic temperatures at the boundaries of utility exchangers
         if s["type"] == "Cold":
-            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", ax_grid=None, markersize=12, label="Heater (HU)" if "Heater (HU)" not in ax_grid.get_legend_handles_labels()[1] else "", zorder=5)
+            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred", weight="bold")
         else:
-            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", ax_grid=None, markersize=12, label="Cooler (CU)" if "Cooler (CU)" not in ax_grid.get_legend_handles_labels()[1] else "", zorder=5)
+            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="dodgerblue", weight="bold")
             
@@ -268,8 +268,8 @@ with tab3:
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
         ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
     
-    # Custom Unique Consolidated Legend at the bottom
-    from matplotlib.lines import Line22d
+    # Custom Unique Consolidated Legend at the bottom (FIXED Line2D import issue)
+    from matplotlib.lines import Line2D
     custom_legend = [
         Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger', markerfacecolor='green', markersize=10),
         Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
