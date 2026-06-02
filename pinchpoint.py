@@ -9,53 +9,91 @@ st.title("🔥 Advanced Pinch Point Analysis & HEN Optimizer")
 st.write("Σχεδιασμός Δικτύων Εναλλακτών Θερμότητας με Δυναμικά Ρεύματα, Δυναμικά Φορτία Μονάδας & GCC")
 
 # --- ΤΑΜΠΛΟ ΔΕΔΟΜΕΝΩΝ (2 ΠΙΝΑΚΕΣ) ---
-col_table1, col_table2 = st.columns([3, 2])
+col_table1, col_table2 = st.columns()
 
 with col_table1:
     st.header("📋 1. Δεδομένα Ρευμάτων Εισόδου")
     st.write("Εισάγετε τα ρεύματα με βάση το Θερμικό Φορτίο (kW) όπως στο PDF.")
     
+    # Χρησιμοποιούμε απλά ονόματα στηλών (English keys) για ασφάλεια στον κώδικα
     default_streams = pd.DataFrame([
-        {"Όνομα": "E1", "Tin (°C)": 133.0, "Tout (°C)": 20.0, "Φορτίο Q (kW)": 594.0},
-        {"Όνομα": "E2", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Φορτίο Q (kW)": 890.8},
-        {"Όνομα": "E3", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Φορτίο Q (kW)": 891.3},
-        {"Όνομα": "E4", "Tin (°C)": 113.0, "Tout (°C)": 725.0, "Φορτίο Q (kW)": 13969.0},
-        {"Όνομα": "E5", "Tin (°C)": 725.0, "Tout (°C)": 25.0, "Φορτίο Q (kW)": 19310.1},
-        {"Όνομα": "E6", "Tin (°C)": 58.0, "Tout (°C)": 250.0, "Φορτίο Q (kW)": 14518.1},
-        {"Όνομα": "E7", "Tin (°C)": 250.0, "Tout (°C)": 30.0, "Φορτίο Q (kW)": 21434.7}
+        {"name": "E1", "tin": 133.0, "tout": 20.0, "q_load": 594.0},
+        {"name": "E2", "tin": 116.0, "tout": 25.0, "q_load": 890.8},
+        {"name": "E3", "tin": 116.0, "tout": 25.0, "q_load": 891.3},
+        {"name": "E4", "tin": 113.0, "tout": 725.0, "q_load": 13969.0},
+        {"name": "E5", "tin": 725.0, "tout": 25.0, "q_load": 19310.1},
+        {"name": "E6", "tin": 58.0, "tout": 250.0, "q_load": 14518.1},
+        {"name": "E7", "tin": 250.0, "tout": 30.0, "q_load": 21434.7}
     ])
-    edited_df = st.data_editor(default_streams, num_rows="dynamic", use_container_width=True, key="streams_editor")
+    
+    # Αλλάζουμε ΜΟΝΟ την εμφάνιση των τίτλων για τον χρήστη
+    edited_df = st.data_editor(
+        default_streams, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        key="streams_editor",
+        column_config={
+            "name": st.column_config.TextColumn("Όνομα"),
+            "tin": st.column_config.NumberColumn("Tin (°C)"),
+            "tout": st.column_config.NumberColumn("Tout (°C)"),
+            "q_load": st.column_config.NumberColumn("Φορτίο Q (kW)")
+        }
+    )
 
 with col_table2:
     st.header("⚡ 2. Λοιπά Φορτία Διεργασίας")
     st.write("Προσθέστε, μετονομάστε ή αφαιρέστε καταναλωτές ενέργειας (MW).")
     
     default_components = pd.DataFrame([
-        {"Όνομα Εξαρτήματος": "Αντιδραστήρας RWGS", "Φορτίο (MW)": 3.26},
-        {"Όνομα Εξαρτήματος": "Αντιδραστήρας Μεθανόλης", "Φορτίο (MW)": 10.50},
-        {"Όνομα Εξαρτήματος": "Συμπιεστές", "Φορτίο (MW)": 6.60},
-        {"Όνομα Εξαρτήματος": "Διεργασίες Διαχωρισμού", "Φορτίο (MW)": 20.00}
+        {"comp_name": "Αντιδραστήρας RWGS", "comp_mw": 3.26},
+        {"comp_name": "Αντιδραστήρας Μεθανόλης", "comp_mw": 10.50},
+        {"comp_name": "Συμπιεστές", "comp_mw": 6.60},
+        {"comp_name": "Διεργασίες Διαχωρισμού", "comp_mw": 20.00}
     ])
-    edited_components_df = st.data_editor(default_components, num_rows="dynamic", use_container_width=True, key="components_editor")
+    edited_components_df = st.data_editor(
+        default_components, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        key="components_editor",
+        column_config={
+            "comp_name": st.column_config.TextColumn("Όνομα Εξαρτήματος"),
+            "comp_mw": st.column_config.NumberColumn("Φορτίο (MW)")
+        }
+    )
 
-# --- ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΡΕΥΜΑΤΩΝ ---
+# --- ΑΣΦΑΛΗΣ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΡΕΥΜΑΤΩΝ ---
 streams = {}
-for _, row in edited_df.dropna(subset=["Όνομα"]).iterrows():
-    tin, tout, q = row["Tin (°C)"], row["Tout (°C)"], abs(row["Φורτίο Q (kW)"])
-    stream_type = "Hot" if tin > tout else "Cold"
-    dT_stream = abs(tin - tout)
-    cp = q / dT_stream if dT_stream > 0 else 0.0
-    streams[row["Όνομα"]] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
+if edited_df is not None and not edited_df.empty:
+    valid_df = edited_df.dropna(subset=["name", "tin", "tout", "q_load"])
+    for _, row in valid_df.iterrows():
+        try:
+            tin = float(row["tin"])
+            tout = float(row["tout"])
+            q = abs(float(row["q_load"]))
+            name = str(row["name"])
+            
+            stream_type = "Hot" if tin > tout else "Cold"
+            dT_stream = abs(tin - tout)
+            cp = q / dT_stream if dT_stream > 0 else 0.0
+            
+            streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
+        except (ValueError, TypeError, KeyError):
+            continue # Αγνοεί τυχόν μισοσυμπληρωμένες γραμμές χωρίς να κρασάρει
 
-# --- ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΛΟΙΠΩΝ ΕΞΑΡΤΗΜΑΤΩΝ ---
+# --- ΑΣΦΑΛΗΣ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΛΟΙΠΩΝ ΕΞΑΡΤΗΜΑΤΩΝ ---
 other_components = []
 total_other_kw = 0.0
-for _, row in edited_components_df.dropna(subset=["Όνομα Εξαρτήματος"]).iterrows():
-    comp_name = row["Όνομα Εξαρτήματος"]
-    comp_mw = abs(row["Φορτίο (MW)"])
-    comp_kw = comp_mw * 1000  # Μετατροπή σε kW για τους υπολογισμούς
-    total_other_kw += comp_kw
-    other_components.append({"name": comp_name, "mw": comp_mw, "kw": comp_kw})
+if edited_components_df is not None and not edited_components_df.empty:
+    valid_comp_df = edited_components_df.dropna(subset=["comp_name", "comp_mw"])
+    for _, row in valid_comp_df.iterrows():
+        try:
+            name = str(row["comp_name"])
+            mw = abs(float(row["comp_mw"]))
+            kw = mw * 1000
+            total_other_kw += kw
+            other_components.append({"name": name, "mw": mw, "kw": kw})
+        except (ValueError, TypeError, KeyError):
+            continue
 
 # --- GUI CONTROLS FOR dT_min ---
 st.sidebar.header("⚙️ Ρυθμίσεις Μοντέλου")
@@ -143,10 +181,7 @@ with tab2:
     st.subheader("Grand Composite Curve (GCC) - Διάγραμμα Καταρράκτη Ενέργειας")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     
-    # Σχεδίαση της GCC (Feasible Cascade vs Intervals)
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
-    
-    # Προσθήκη των σημείων Qc_min και Qh_min όπως στην εικόνα σας
     ax_gcc.plot(qc_min, intervals[-1], marker="o", color="dodgerblue", markersize=8, label=f"Qc,min = {qc_min:,.1f} kW")
     ax_gcc.plot(qh_min, intervals[0], marker="o", color="red", markersize=8, label=f"Qh,min = {qh_min:,.1f} kW")
     
@@ -172,7 +207,6 @@ with tab3:
 with tab4:
     st.subheader("Κατανομή Ενεργειακών Απαιτήσεων βάσει των Δυναμικών Εξαρτημάτων")
     
-    # Δυναμική προετοιμασία δεδομένων για τα Pie Charts
     labels = ['Θέρμανση Ρευμάτων (Hot Utilities)'] + [c["name"] for c in other_components]
     sizes_before = [total_cold_load / 1000] + [c["mw"] for c in other_components]
     sizes_after = [qh_min / 1000] + [c["mw"] for c in other_components]
@@ -189,4 +223,3 @@ with tab4:
     ax2.set_title(f"ΜΕΤΑ την Ολοκλήρωση\n(Σύνολο: {total_after:.2f} MW)")
     
     st.pyplot(fig_pie)
-    st.info(f"💡 Συνολική μείωση απαιτούμενης ισχύος της μονάδας: **{total_before - total_after:.2f} MW**")
