@@ -7,18 +7,10 @@ from fpdf import FPDF
 
 st.set_page_config(layout="wide")
 
-st.title("🔥 Advanced Pinch Point Analysis & Industrial HEN Optimizer")
-st.write("Enterprise Heat Exchanger Network (HEN) Design with Economic Targeting, Excel I/O & PDF Reporting")
+st.title("🔥 Enterprise Pinch Point Analyzer & HEN Synthesizer")
+st.write("Industrial Heat Exchanger Network Design with Dynamic Break-Even Horizons & Multi-Interval Grid Layouts")
 
-# --- EXPORT FUNCTIONS (EXCEL & PDF) ---
-def to_excel(df_streams, df_comps, econ_summary):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_streams.to_excel(writer, sheet_name='Streams Data', index=False)
-        df_comps.to_excel(writer, sheet_name='Other Components', index=False)
-        pd.DataFrame([econ_summary]).to_excel(writer, sheet_name='Economic Evaluation', index=False)
-    return output.getvalue()
-
+# --- EXECUTIVE PDF REPORT GENERATION ---
 def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
     pdf = FPDF()
     pdf.add_page()
@@ -170,6 +162,7 @@ except Exception:
 
 total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
 total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
+
 # --- FINANCIAL ACCELERATION LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
@@ -186,7 +179,6 @@ econ_summary = {
     "Estimated HEN Capital Investment (CAPEX)": f"€{capex_investment:,.2f}",
     "Simple Payback Period": f"{payback_period_years:.2f} Years"
 }
-
 # --- METRIC EXPOSURE ---
 st.header("📊 Performance Metrics")
 m1, m2, m3 = st.columns(3)
@@ -194,16 +186,10 @@ m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C")
 m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Payback: {payback_period_years:.2f} yrs")
 m3.metric("True Total Exchangers Required", f"{hx_process_count + 6} Units")
 
-# --- DOWNLOAD PIPELINES ---
+# --- DOWNLOAD PIPELINE (PDF ONLY AS REQUESTED) ---
 st.subheader("💾 Cloud Reporting Infrastructure")
-excel_data = to_excel(edited_df, edited_components_df, econ_summary)
 pdf_data = create_pdf(econ_summary, qh_min, qc_min, pinch_hot, pinch_cold)
-
-c_exp1, c_exp2 = st.columns(2)
-with c_exp1:
-    st.download_button(label="📥 Download Data & Financial Targets (Excel)", data=excel_data, file_name="HEN_Optimization_Framework.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-with c_exp2:
-    st.download_button(label="📥 Download Executive Technical Report (PDF)", data=pdf_data, file_name="Pinch_Analysis_Report.pdf", mime="application/pdf")
+st.download_button(label="📥 Download Executive Technical Report (PDF)", data=pdf_data, file_name="Pinch_Analysis_Report.pdf", mime="application/pdf")
 
 # --- GRAPHICAL ANALYTICAL TABS ---
 st.header("📈 Thermodynamic, Financial & Network Visualizations")
@@ -237,14 +223,10 @@ with tab1:
 with tab2:
     st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
-    
-    # Σχεδίαση της κύριας καμπύλης GCC
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-    # ΔΙΟΡΘΩΣΗ: Σχεδίαση μίας μόνο καθαρής οριζόντιας γραμμής για το κάθε Utility
-    # Η Hot Utility γραμμή μπαίνει στην ανώτερη μετατοπισμένη θερμοκρασία (πρώτο interval)
+    # FIX: Single line plotting for targets to avoid duplicates
     ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
-    # Η Cold Utility γραμμή μπαίνει στην κατώτερη μετατοπισμένη θερμοκρασία (τελευταίο interval)
     ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
@@ -254,73 +236,82 @@ with tab2:
     st.pyplot(fig_gcc)
 
 with tab3:
-    st.subheader("Heat Exchanger Network (HEN) Grid Layout & True Inventory")
-    fig_grid, ax_grid = plt.subplots(figsize=(12, 6))
-    y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
+    st.subheader("Advanced Heat Exchanger Network (HEN) Temperature Intervals Layout")
     
-    for name, s in streams.items():
-        y = y_pos[name]
-        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
-        ax_grid.text(s["Tin"], y + 0.15, f"{name} ({s['Tin']}°C)", fontsize=9, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
-        ax_grid.text(s["Tout"], y - 0.25, f"{s['Tout']}°C", fontsize=9, ha='left' if s["type"]=="Hot" else 'right')
+    # Extract unique temperatures to create horizontal interval lines exactly like the user's diagram
+    raw_temps = []
+    for s in streams.values():
+        raw_temps.extend([s["Tin"], s["Tout"]])
+    unique_temps = sorted(list(set(raw_temps)), reverse=True)
+    
+    fig_grid, ax_grid = plt.subplots(figsize=(12, 7))
+    
+    # 1. Draw horizontal temperature interval lines
+    for idx, t in enumerate(unique_temps):
+        ax_grid.axhline(y=t, color="black", linestyle="-", lw=0.8, alpha=0.6)
+        ax_grid.text(-10, t, f"{t}°C", fontsize=9, va="center", ha="right", weight="bold")
         
-    if isinstance(pinch_hot, float):
-        ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.7, lw=2)
-        ax_grid.text(pinch_hot, len(streams) + 0.5, f"Pinch ({pinch_hot}°C)", color="gray", ha="center", weight="bold")
+        # Add interval letter labels (A, B, C...) between lines
+        if idx < len(unique_temps) - 1:
+            mid_t = (unique_temps[idx] + unique_temps[idx+1]) / 2
+            letter = chr(65 + idx) # A, B, C...
+            ax_grid.text(len(streams)*20 + 5, mid_t, letter, fontsize=12, weight="bold", color="gray", va="center")
 
-    # Dynamic index-based process heat recovery connections
-    hx_count = 0
+    # Draw vertical separator line between Hot and Cold streams
+    sep_x = len([n for n in stream_names_list if streams[n]["type"]=="Hot"]) * 20 + 10
+    ax_grid.axvline(x=sep_x, color="black", linestyle="-", lw=1.5)
+
+    # 2. Plot vertical stream arrows passing through temperature ranges
+    x_pos = {}
+    hot_counter = 0
+    cold_counter = 0
+    
+    for name in stream_names_list:
+        s = streams[name]
+        if s["type"] == "Hot":
+            hot_counter += 1
+            x = hot_counter * 20
+            # Hot streams flow downwards (Tin to Tout)
+            ax_grid.annotate("", xy=(x, s["Tout"]), xytext=(x, s["Tin"]), arrowprops=dict(arrowstyle="->", color="red", lw=3.5))
+        else:
+            cold_counter += 1
+            x = sep_x + (cold_counter * 20)
+            # Cold streams flow upwards (Tin to Tout)
+            ax_grid.annotate("", xy=(x, s["Tout"]), xytext=(x, s["Tin"]), arrowprops=dict(arrowstyle="->", color="blue", lw=3.5))
+            
+        x_pos[name] = x
+        ax_grid.text(x, max(unique_temps) + 20, name, fontsize=10, ha="center", weight="bold")
+        ax_grid.text(x, max(unique_temps) + 40, f"{s['Cp']:.2f}" if s['Cp']>0 else "N/A", fontsize=8, ha="center", color="dimgray")
+
+    # 3. Dynamic Process Heat Exchangers (Green lines between lines)
     if len(stream_names_list) >= 7:
-        index_matches = [
-            (stream_names_list[4], stream_names_list[3], 450), 
-            (stream_names_list[6], stream_names_list[5], 150)
-        ]
-    else:
-        index_matches = []
-        hot_st = [n for n in stream_names_list if streams[n]["type"]=="Hot"]
-        cold_st = [n for n in stream_names_list if streams[n]["type"]=="Cold"]
-        for i in range(min(len(hot_st), len(cold_st))):
-            index_matches.append((hot_st[i], cold_st[i], (streams[hot_st[i]]["Tin"] + streams[cold_st[i]]["Tin"])/2))
+        # Match HX 1 (between 5th stream and 4th stream in mid temperature)
+        ax_grid.plot([x_pos[stream_names_list[4]], x_pos[stream_names_list[3]]], [450, 450], color="green", marker="o", markersize=10, lw=2, zorder=5)
+        ax_grid.text((x_pos[stream_names_list[4]] + x_pos[stream_names_list[3]])/2, 470, "HX 1", color="green", weight="bold", ha="center")
+        
+        # Match HX 2 (between 7th stream and 6th stream)
+        ax_grid.plot([x_pos[stream_names_list[6]], x_pos[stream_names_list[5]]], [150, 150], color="green", marker="o", markersize=10, lw=2, zorder=5)
+        ax_grid.text((x_pos[stream_names_list[6]] + x_pos[stream_names_list[5]])/2, 170, "HX 2", color="green", weight="bold", ha="center")
 
-    for hot_st, cold_st, x_pos in index_matches:
-        if hot_st in y_pos and cold_st in y_pos:
-            hx_count += 1
-            y_hot = y_pos[hot_st]
-            y_cold = y_pos[cold_st]
-            ax_grid.plot([x_pos, x_pos], [y_hot, y_cold], color="green", linestyle="-", lw=2, zorder=3)
-            ax_grid.plot([x_pos, x_pos], [y_hot, y_cold], marker="o", color="green", markersize=10, zorder=4)
-            ax_grid.text(x_pos + 6, (y_hot + y_cold)/2, f"HX {hx_count}", color="green", weight="bold", fontsize=10)
-
-    # Rendering Auxiliary Units (Heaters / Coolers)
-    hu_count, cu_count = 0, 0
+    # 4. Auxiliary Utilities Placement (HU / CU matching the specific diagram positions)
     for name, s in streams.items():
-        y = y_pos[name]
-        if s["type"] == "Cold" and s["Tout"] > 400: 
-            hu_count += 1
-            hu_x = s["Tout"] - 30
-            ax_grid.plot(hu_x, y, marker="o", color="darkred", markersize=11, zorder=5)
-            ax_grid.text(hu_x, y + 0.15, f"HU {hu_count}", color="darkred", weight="bold", fontsize=9, ha="center")
-        if s["type"] == "Hot" and s["Tout"] < 40: 
-            cu_count += 1
-            cu_x = s["Tout"] + 15
-            ax_grid.plot(cu_x, y, marker="o", color="blue", markersize=11, zorder=5)
-            ax_grid.text(cu_x, y + 0.15, f"CU {cu_count}", color="blue", weight="bold", fontsize=9, ha="center")
+        x = x_pos[name]
+        if s["type"] == "Cold" and s["Tout"] > 700: # Heater on top of C1
+            ax_grid.plot(x, 725, marker="o", color="darkred", markersize=12, zorder=6)
+            ax_grid.text(x, 725, "HU", color="white", weight="bold", fontsize=7, ha="center", va="center")
+        if s["type"] == "Hot" and s["Tout"] < 40: # Coolers at bottoms of Hot streams
+            ax_grid.plot(x, s["Tout"] + 15, marker="o", color="dodgerblue", markersize=12, zorder=6)
+            ax_grid.text(x, s["Tout"] + 15, "CU", color="white", weight="bold", fontsize=7, ha="center", va="center")
 
-    ax_grid.set_yticks(list(y_pos.values()))
-    ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
-    ax_grid.set_xlabel("Temperature (°C)", weight="bold")
-    ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
+    ax_grid.set_xlim(-20, sep_x + (cold_counter * 20) + 20)
+    ax_grid.set_ylim(min(unique_temps) - 20, max(unique_temps) + 60)
+    ax_grid.axis("off") # Clean layout driven purely by interval lines
     st.pyplot(fig_grid)
-    st.success(f"Network Balance Inventory -> Process Exchangers: {hx_count} | Heaters (HU): {hu_count} | Coolers (CU): {cu_count} || Total Fleet: {hx_count + hu_count + cu_count}")
 
 with tab4:
-    st.subheader("Global Process Energy Allocation (Pie Charts)")
     labels = ['Hot Utilities', 'Cold Utilities'] + [c["name"] for c in other_components]
     sizes_before = [total_cold_load / 1000, total_hot_load / 1000] + [c["mw"] for c in other_components]
     sizes_after = [qh_min / 1000, qc_min / 1000] + [c["mw"] for c in other_components]
-    
-    total_before = sum(sizes_before)
-    total_after = sum(sizes_after)
     
     colors_map = ['#FF0000', '#0070C0', '#FFC000', '#7030A0', '#ED7D31', '#70AD47']
     if len(labels) > len(colors_map):
@@ -329,57 +320,55 @@ with tab4:
     
     fig_pie, (ax_p1, ax_p2) = plt.subplots(1, 2, figsize=(14, 6))
     ax_p1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors)
-    ax_p1.set_title(f"Before Heat Integration\n(Total: {total_before:.2f} MW)", weight='bold')
+    ax_p1.set_title(f"Before Heat Integration\n(Total: {sum(sizes_before):,.2f} MW)", weight='bold')
     
     ax_p2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors)
-    ax_p2.set_title(f"After Heat Integration\n(Total: {total_after:.2f} MW)", weight='bold')
+    ax_p2.set_title(f"After Heat Integration\n(Total: {sum(sizes_after):,.2f} MW)", weight='bold')
     
     fig_pie.legend(labels=labels, loc='lower center', ncol=3)
     plt.subplots_adjust(bottom=0.2)
     st.pyplot(fig_pie)
 
 with tab5:
-    st.subheader("💰 Capital & Operating Expenditure Analysis (CAPEX vs OPEX)")
+    st.subheader("💰 Dynamic Financial Break-Even Horizons (Line Graph Evaluation)")
     col_g1, col_g2 = st.columns(2)
+    years_range = np.arange(0, 11)
     
     with col_g1:
-        st.markdown("**1. Annual Operating Expenditures (OPEX Comparison)**")
-        fig_opex, ax_opex = plt.subplots(figsize=(8, 5))
+        st.markdown("**1. Operating Expenditures Horizon (Cumulative OPEX Comparison)**")
+        # Line Graph for accumulating running costs year by year
+        opex_accum_base = op_cost_before * years_range
+        opex_accum_integrated = op_cost_after * years_range
         
-        bars_op = ax_opex.bar(
-            ["Base System (No Integration)", "Integrated HEN System"], 
-            [op_cost_before, op_cost_after], 
-            color=["#D9534F", "#5CB85C"], 
-            width=0.4
-        )
-        ax_opex.set_ylabel("Annual Utility Cost (€/year)", weight="bold")
-        ax_opex.grid(axis='y', linestyle=':', alpha=0.5)
+        fig_line_op, ax_line_op = plt.subplots(figsize=(10, 5.5))
+        ax_line_op.plot(years_range, opex_accum_base, color="red", linestyle="--", marker="o", label="Base Configuration (Unintegrated Bills)", lw=2)
+        ax_line_op.plot(years_range, opex_accum_integrated, color="green", linestyle="-", marker="s", label="Integrated HEN System (Low Bills)", lw=2.5)
         
-        for bar in bars_op:
-            yval = bar.get_height()
-        for bar in bars_op:
-            yval = bar.get_height()
-            ax_opex.text(bar.get_x() + bar.get_width()/2, yval + (op_cost_before * 0.02), f"€{yval:,.0f}/yr", ha='center', va='bottom', weight='bold')
-            
-        st.pyplot(fig_opex)
-        st.caption("Shows the direct reduction in utility bills achieved through process heat integration.")
+        ax_line_op.set_xlabel("Operating Horizons (Years)", weight="bold")
+        ax_line_op.set_ylabel("Sustained Operating Expenditures Burden (€)", weight="bold")
+        ax_line_op.grid(True, linestyle=":", alpha=0.6)
+        ax_line_op.legend()
+        st.pyplot(fig_line_op)
+        st.caption("Illustrates how utility expenditures accumulate over a 10-year period.")
         
     with col_g2:
-        st.markdown("**2. Upfront Capital Expenditures (CAPEX Investment Required)**")
-        fig_capex, ax_capex = plt.subplots(figsize=(8, 5))
+        st.markdown("**2. Total Capital & Operating Investment Horizon (True Break-Even Point)**")
+        # Line Graph showing CAPEX + OPEX over the years
+        total_spending_base = 0.0 + (op_cost_before * years_range)
+        total_spending_integrated = capex_investment + (op_cost_after * years_range)
         
-        bars_cap = ax_capex.bar(
-            ["Base System (No Integration)", "Integrated HEN System"], 
-            [0.0, capex_investment], 
-            color=["#777777", "#428BCA"], 
-            width=0.4
-        )
-        ax_capex.set_ylabel("Initial Capital Investment (€)", weight="bold")
-        ax_capex.grid(axis='y', linestyle=':', alpha=0.5)
+        fig_break, ax_break = plt.subplots(figsize=(10, 5.5))
+        ax_break.plot(years_range, total_spending_base, color="red", linestyle="--", marker="o", label="Base Configuration Layout", lw=2)
+        ax_break.plot(years_range, total_spending_integrated, color="green", linestyle="-", marker="s", label="Integrated HEN System Structure (CAPEX upfront)", lw=2.5)
         
-        for bar in bars_cap:
-            yval = bar.get_height()
-            ax_capex.text(bar.get_x() + bar.get_width()/2, yval + (capex_investment * 0.02 if capex_investment > 0 else 1000), f"€{yval:,.0f}", ha='center', va='bottom', weight='bold')
+        if payback_period_years <= 10:
+            ax_break.axvline(x=payback_period_years, color="black", linestyle=":", alpha=0.8, lw=1.5)
+            ax_break.plot(payback_period_years, capex_investment + (op_cost_after * payback_period_years), marker="X", color="gold", markersize=12, zorder=10)
+            ax_break.text(payback_period_years + 0.2, capex_investment * 1.3, f"Break-Even Point\n({payback_period_years:.2f} Years)", color="black", weight="bold")
             
-        st.pyplot(fig_capex)
-        st.caption("Represents the asset hardware installation cost (New Heat Exchangers + Area adjustments).")
+        ax_break.set_xlabel("Operating Horizons (Years)", weight="bold")
+        ax_break.set_ylabel("Total Lifecycle Expenditure (CAPEX + OPEX) (€)", weight="bold")
+        ax_break.grid(True, linestyle=":", alpha=0.6)
+        ax_break.legend()
+        st.pyplot(fig_break)
+        st.caption("The cross-over point identifies the precise year where your hardware CAPEX injection yields net positive business equity.")
