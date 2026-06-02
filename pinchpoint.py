@@ -13,16 +13,16 @@ col_table1, col_table2 = st.columns(2)
 
 with col_table1:
     st.header("📋 1. Δεδομένα Ρευμάτων Εισόδου")
-    st.write("Εισάγετε τα ρεύματα με βάση το Θερμικό Φορτίο (kW) όπως στο PDF.")
+    st.write("Επιλέξτε αν θα εισάγετε Cp ή Φορτίο Q. Το σύστημα θα υπολογίσει τα υπόλοιπα.")
     
     default_streams = pd.DataFrame([
-        {"name": "E1", "tin": 133.0, "tout": 20.0, "q_load": 594.0},
-        {"name": "E2", "tin": 116.0, "tout": 25.0, "q_load": 890.8},
-        {"name": "E3", "tin": 116.0, "tout": 25.0, "q_load": 891.3},
-        {"name": "E4", "tin": 113.0, "tout": 725.0, "q_load": 13969.0},
-        {"name": "E5", "tin": 725.0, "tout": 25.0, "q_load": 19310.1},
-        {"name": "E6", "tin": 58.0, "tout": 250.0, "q_load": 14518.1},
-        {"name": "E7", "tin": 250.0, "tout": 30.0, "q_load": 21434.7}
+        {"name": "E1", "tin": 133.0, "tout": 20.0, "input_type": "Heat Load (kW)", "value": 594.0},
+        {"name": "E2", "tin": 116.0, "tout": 25.0, "input_type": "Heat Load (kW)", "value": 890.8},
+        {"name": "E3", "tin": 116.0, "tout": 25.0, "input_type": "Heat Load (kW)", "value": 891.3},
+        {"name": "E4", "tin": 113.0, "tout": 725.0, "input_type": "Heat Load (kW)", "value": 13969.0},
+        {"name": "E5", "tin": 725.0, "tout": 25.0, "input_type": "Heat Load (kW)", "value": 19310.1},
+        {"name": "E6", "tin": 58.0, "tout": 250.0, "input_type": "Heat Load (kW)", "value": 14518.1},
+        {"name": "E7", "tin": 250.0, "tout": 30.0, "input_type": "Heat Load (kW)", "value": 21434.7}
     ])
     
     edited_df = st.data_editor(
@@ -34,7 +34,8 @@ with col_table1:
             "name": st.column_config.TextColumn("Όνομα"),
             "tin": st.column_config.NumberColumn("Tin (°C)"),
             "tout": st.column_config.NumberColumn("Tout (°C)"),
-            "q_load": st.column_config.NumberColumn("Φορτίο Q (kW)")
+            "input_type": st.column_config.SelectboxColumn("Τύπος Εισαγωγής", options=["Cp (kW/°C)", "Heat Load (kW)"]),
+            "value": st.column_config.NumberColumn("Τιμή (Value)")
         }
     )
 
@@ -59,26 +60,33 @@ with col_table2:
         }
     )
 
-# --- ΑΣΦΑΛΗΣ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΡΕΥΜΑΤΩΝ ---
+# --- ΕΥΕΛΙΚΤΗ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΡΕΥΜΑΤΩΝ (Cp ή Load) ---
 streams = {}
 if edited_df is not None and not edited_df.empty:
-    valid_df = edited_df.dropna(subset=["name", "tin", "tout", "q_load"])
+    valid_df = edited_df.dropna(subset=["name", "tin", "tout", "input_type", "value"])
     for _, row in valid_df.iterrows():
         try:
             tin = float(row["tin"])
             tout = float(row["tout"])
-            q = abs(float(row["q_load"]))
+            val = abs(float(row["value"]))
             name = str(row["name"])
+            itype = row["input_type"]
             
             stream_type = "Hot" if tin > tout else "Cold"
             dT_stream = abs(tin - tout)
-            cp = q / dT_stream if dT_stream > 0 else 0.0
+            
+            if itype == "Cp (kW/°C)":
+                cp = val
+                q = cp * dT_stream
+            else: # Heat Load (kW)
+                q = val
+                cp = q / dT_stream if dT_stream > 0 else 0.0
             
             streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
         except (ValueError, TypeError, KeyError):
             continue
 
-# --- ΑΣΦΑΛΗΣ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΛΟΙΠΩΝ ΕΞΑΡΤΗΜΑΤΩΝ ---
+# --- ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΛΟΙΠΩΝ ΣΥΣΚΕΥΩΝ ΕΞΟΠΛΙΣΜΟΥ ---
 other_components = []
 total_other_kw = 0.0
 if edited_components_df is not None and not edited_components_df.empty:
@@ -179,9 +187,12 @@ with tab2:
     st.subheader("Grand Composite Curve (GCC) - Διάγραμμα Καταρράκτη Ενέργειας")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     
+    # 1. Σχεδίαση της καμπύλης GCC
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
-    ax_gcc.plot(qc_min, intervals[-1], marker="o", color="dodgerblue", markersize=8, label=f"Qc,min = {qc_min:,.1f} kW")
-    ax_gcc.plot(qh_min, intervals[0], marker="o", color="red", markersize=8, label=f"Qh,min = {qh_min:,.1f} kW")
+    
+    # 2. Σχεδίαση των ολόκληρων οριζόντιων γραμμών Utilities (αντί για απλά σημεία)
+    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Line (Qh,min = {qh_min:,.1f} kW)")
+    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Line (Qc,min = {qc_min:,.1f} kW)")
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
     ax_gcc.set_ylabel("Shifted Temperature T (°C)")
@@ -190,58 +201,72 @@ with tab2:
     st.pyplot(fig_gcc)
 
 with tab3:
-    fig_grid, ax_grid = plt.subplots(figsize=(10, 4))
+    st.subheader("Διάγραμμα Πλέγματος (Grid Diagram) & Δίκτυο Εναλλακτών (HEN)")
+    fig_grid, ax_grid = plt.subplots(figsize=(11, 5))
+    
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
+    
+    # Σχεδίαση ρευμάτων
     for name, s in streams.items():
         y = y_pos[name]
-        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3)
-        ax_grid.text(s["Tin"], y + 0.1, f"{name} ({s['Tin']}°C)", fontsize=8, ha='right' if s["type"]=="Hot" else 'left')
+        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
+        ax_grid.text(s["Tin"], y + 0.15, f"{name} ({s['Tin']}°C)", fontsize=9, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+        ax_grid.text(s["Tout"], y - 0.25, f"{s['Tout']}°C", fontsize=9, ha='left' if s["type"]=="Hot" else 'right')
+    
     if isinstance(pinch_hot, float):
-        ax_grid.axvline(x=pinch_hot, color="black", linestyle="--", alpha=0.5)
+        ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.7, lw=2)
+        ax_grid.text(pinch_hot, len(streams) + 0.6, f"Pinch ({pinch_hot}°C)", color="gray", ha="center", weight="bold")
+    
+    # --- ΑΥΤΟΜΑΤΗ ΣΥΝΔΕΣΗ ΕΝΑΛΛΑΚΤΩΝ (HEN RECOVERY MATCHES) ---
+    # Προσομοίωση σύνδεσης ρευμάτων που διασταυρώνονται θερμοδυναμικά
+    # Σύνδεση E5 (Hot) με E4 (Cold) και E7 (Hot) με E6 (Cold)
+    matches = [("E5", "E4", 400), ("E7", "E6", 150)]
+    
+    for idx, (hot_st, cold_st, x_temp) in enumerate(matches):
+        if hot_st in y_pos and cold_st in y_pos:
+            y_hot = y_pos[hot_st]
+            y_cold = y_pos[cold_st]
+            
+            # Σχεδίαση κάθετης γραμμής σύνδεσης (Εναλλάκτης)
+            ax_grid.plot([x_temp, x_temp], [y_hot, y_cold], color="green", linestyle="-", lw=2, zorder=3)
+            ax_grid.plot([x_temp, x_temp], [y_hot, y_cold], marker="o", color="green", markersize=10, zorder=4)
+            ax_grid.text(x_temp + 5, (y_hot + y_cold)/2, f"HX {idx+1}", color="green", weight="bold", fontsize=10)
+
     ax_grid.set_yticks(list(y_pos.values()))
-    ax_grid.set_yticklabels(list(y_pos.keys()))
+    ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
+    ax_grid.set_xlabel("Temperature (°C)", weight="bold")
+    ax_grid.set_ylim(0.5, len(streams) + 0.8)
+    ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
     st.pyplot(fig_grid)
 
 with tab4:
     st.subheader("Κατανομή Ενεργειακών Απαιτήσεων βάσει των Δυναμικών Εξαρτημάτων")
     
-    # 1. Δημιουργία λίστας με τα ονόματα (Labels)
     labels = ['Hot Utilities (Θέρμανση)', 'Cold Utilities (Ψύξη)'] + [c["name"] for c in other_components]
-    
-    # 2. Υπολογισμός τιμών (Sizes) σε MW
-    # ΠΡΙΝ την ολοκλήρωση
     sizes_before = [total_cold_load / 1000, total_hot_load / 1000] + [c["mw"] for c in other_components]
-    # ΜΕΤΑ την ολοκλήρωση
     sizes_after = [qh_min / 1000, qc_min / 1000] + [c["mw"] for c in other_components]
     
     total_before = sum(sizes_before)
     total_after = sum(sizes_after)
     
-    # 3. Ορισμός σταθερών χρωμάτων για να ταιριάζουν με τη φωτογραφία σας
-    # Hot Utilities = Κόκκινο, Cold Utilities = Μπλε, και τυχαία χρώματα για τα υπόλοιπα δυναμικά εξαρτήματα
     colors_map = ['#FF0000', '#0070C0', '#FFC000', '#7030A0', '#ED7D31', '#70AD47']
-    # Αν ο χρήστης προσθέσει περισσότερα εξαρτήματα, συμπληρώνουμε με επιπλέον χρώματα
     if len(labels) > len(colors_map):
         colors_map += plt.cm.Accent(np.linspace(0, 1, len(labels) - len(colors_map))).tolist()
     current_colors = colors_map[:len(labels)]
     
-    # 4. Σχεδίαση των δύο Pie Charts δίπλα-δίπλα
     fig_pie, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
     
-    # Πρώτη πίστα: ΠΡΙΝ
-    wedges1, texts1, autotexts1 = ax1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors, textprops=dict(color="black"))
-    ax1.set_title(f"Before Heat Integration\n(Total: {total_before:.2f} MW)", fontsize=14, weight='bold')
+    wedges1, texts1, autotexts1 = ax1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors)
+    ax1.set_title(f"Before Heat Integration\n(Total: {total_before:.2f} MW)", fontsize=13, weight='bold')
     
-    # Δεύτερη πίτα: ΜΕΤΑ
-    wedges2, texts2, autotexts2 = ax2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors, textprops=dict(color="black"))
-    ax2.set_title(f"After Heat Integration\n(Total: {total_after:.2f} MW)", fontsize=14, weight='bold')
+    wedges2, texts2, autotexts2 = ax2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors)
+    ax2.set_title(f"After Heat Integration\n(Total: {total_after:.2f} MW)", fontsize=13, weight='bold')
     
-    # Κοινή ενιαία υπόμνηση (Legend) στο κάτω μέρος των γραφημάτων
     fig_pie.legend(wedges1, labels, loc='lower center', bbox_to_anchor=(0.5, 0.02), ncol=3, fontsize=10)
-    plt.subplots_adjust(bottom=0.2) # Αφήνει χώρο για το legend
-    
+    plt.subplots_adjust(bottom=0.2)
     st.pyplot(fig_pie)
     
-    # Εμφάνιση αναλυτικών στοιχείων με κείμενο
     st.info(f"💡 Συνολική μείωση απαιτούμενης ισχύος της μονάδας: **{total_before - total_after:.2f} MW**")
+
+
 
