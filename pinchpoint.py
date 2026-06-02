@@ -58,7 +58,7 @@ fixed_hex_cost = st.sidebar.number_input("Fixed Cost per Exchanger (€)", value
 area_cost_coeff = st.sidebar.number_input("Area Cost Coefficient (€/m²)", value=400)
 estimated_area = st.sidebar.number_input("Estimated Total New Area needed (m²)", value=250)
 
-# --- INITIALIZATION AND BLANK STATE DATA TEMPLATES ---
+# --- INITIALIZATION (PURE BLANK STATE) ---
 st.header("📥 Data Initialization")
 
 empty_streams = pd.DataFrame([
@@ -68,24 +68,6 @@ empty_streams = pd.DataFrame([
 empty_components = pd.DataFrame([
     {"Component Name": "", "Load (MW)": None}
 ])
-
-# Interactive button to instantly populate CAMERE benchmark data
-if st.button("💡 Load CAMERE Process Benchmark Data"):
-    st.session_state["streams_data"] = pd.DataFrame([
-        {"Stream Name": "E1", "Tin (°C)": 133.0, "Tout (°C)": 20.0, "Input Mode": "Heat Load (kW)", "Value": 594.0},
-        {"Stream Name": "E2", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 890.8},
-        {"Stream Name": "E3", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 891.3},
-        {"Stream Name": "E4", "Tin (°C)": 113.0, "Tout (°C)": 725.0, "Input Mode": "Heat Load (kW)", "Value": 13969.0},
-        {"Stream Name": "E5", "Tin (°C)": 725.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 19310.1},
-        {"Stream Name": "E6", "Tin (°C)": 58.0, "Tout (°C)": 250.0, "Input Mode": "Heat Load (kW)", "Value": 14518.1},
-        {"Stream Name": "E7", "Tin (°C)": 250.0, "Tout (°C)": 30.0, "Input Mode": "Heat Load (kW)", "Value": 21434.7}
-    ])
-    st.session_state["components_data"] = pd.DataFrame([
-        {"Component Name": "RWGS Reactor", "Load (MW)": 3.26},
-        {"Component Name": "MeOH Reactor", "Load (MW)": 10.50},
-        {"Component Name": "Compressors", "Load (MW)": 6.60},
-        {"Component Name": "Separators", "Load (MW)": 20.00}
-    ])
 
 # Handle Excel Upload
 uploaded_file = st.sidebar.file_uploader("Import Network Data from Excel", type=["xlsx"])
@@ -155,7 +137,7 @@ if edited_components_df is not None and not edited_components_df.empty:
 # --- BLANK STATE INTERACTION CONTROL ---
 if len(streams) < 2:
     st.markdown("---")
-    st.info("📌 **Waiting for user input matrix...** Please add your stream details above or click **'Load CAMERE Process Benchmark Data'** to explore the charts.")
+    st.info("📌 **Waiting for user input matrix...** Please add your stream details above or upload an Excel file to generate analysis.")
     st.stop()
 
 # --- THERMODYNAMIC PINCH CALCULATIONS ---
@@ -188,7 +170,6 @@ except Exception:
 
 total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
 total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
-
 # --- FINANCIAL ACCELERATION LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
@@ -256,9 +237,16 @@ with tab1:
 with tab2:
     st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
+    
+    # Σχεδίαση της κύριας καμπύλης GCC
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
-    ax_gcc.plot([0, qh_min], [intervals, intervals], color="red", lw=2.5, linestyle="-", marker="s", label="Hot Utility Line (Qh,min)")
-    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label="Cold Utility Line (Qc,min)")
+    
+    # ΔΙΟΡΘΩΣΗ: Σχεδίαση μίας μόνο καθαρής οριζόντιας γραμμής για το κάθε Utility
+    # Η Hot Utility γραμμή μπαίνει στην ανώτερη μετατοπισμένη θερμοκρασία (πρώτο interval)
+    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
+    # Η Cold Utility γραμμή μπαίνει στην κατώτερη μετατοπισμένη θερμοκρασία (τελευταίο interval)
+    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
+    
     ax_gcc.set_xlabel("ΔΗ (kW)")
     ax_gcc.set_ylabel("Shifted Temperature T* (°C)")
     ax_gcc.grid(True, linestyle=":", alpha=0.6)
@@ -351,42 +339,47 @@ with tab4:
     st.pyplot(fig_pie)
 
 with tab5:
-    st.subheader("💰 Financial Analysis & Capital Payback Framework")
+    st.subheader("💰 Capital & Operating Expenditure Analysis (CAPEX vs OPEX)")
     col_g1, col_g2 = st.columns(2)
-    years_range = np.arange(0, 11)
     
     with col_g1:
-        st.markdown("**Cumulative Spending Horizon (Positive Cost Accumulation)**")
-        spending_no_integration = op_cost_before * years_range
-        spending_integrated = capex_investment + (op_cost_after * years_range)
+        st.markdown("**1. Annual Operating Expenditures (OPEX Comparison)**")
+        fig_opex, ax_opex = plt.subplots(figsize=(8, 5))
         
-        fig_cash, ax_cash = plt.subplots(figsize=(10, 5))
-        ax_cash.plot(years_range, spending_no_integration, color="red", linestyle="--", label="Option A: Base Plant (Unintegrated Bills)", lw=2)
-        ax_cash.plot(years_range, spending_integrated, color="green", label="Option B: HEN Integration (CAPEX Invested)", lw=2.5)
+        bars_op = ax_opex.bar(
+            ["Base System (No Integration)", "Integrated HEN System"], 
+            [op_cost_before, op_cost_after], 
+            color=["#D9534F", "#5CB85C"], 
+            width=0.4
+        )
+        ax_opex.set_ylabel("Annual Utility Cost (€/year)", weight="bold")
+        ax_opex.grid(axis='y', linestyle=':', alpha=0.5)
         
-        if payback_period_years <= 10:
-            ax_cash.axvline(x=payback_period_years, color="black", linestyle=":", alpha=0.8)
-            ax_cash.text(payback_period_years + 0.2, capex_investment * 1.5, f"Break-Even Point\n({payback_period_years:.2f} Years)", color="black", weight="bold")
+        for bar in bars_op:
+            yval = bar.get_height()
+        for bar in bars_op:
+            yval = bar.get_height()
+            ax_opex.text(bar.get_x() + bar.get_width()/2, yval + (op_cost_before * 0.02), f"€{yval:,.0f}/yr", ha='center', va='bottom', weight='bold')
             
-        ax_cash.set_xlabel("Operating Years")
-        ax_cash.set_ylabel("Total Financial Spending Burden (€)")
-        ax_cash.grid(True, linestyle=":", alpha=0.6)
-        ax_cash.legend()
-        st.pyplot(fig_cash)
+        st.pyplot(fig_opex)
+        st.caption("Shows the direct reduction in utility bills achieved through process heat integration.")
         
     with col_g2:
-        st.markdown("**Total Cost of Ownership Comparison (10-Year Lifecycle Horizon)**")
-        total_10_base = op_cost_before * 10
-        total_10_integrated = capex_investment + (op_cost_after * 10)
+        st.markdown("**2. Upfront Capital Expenditures (CAPEX Investment Required)**")
+        fig_capex, ax_capex = plt.subplots(figsize=(8, 5))
         
-        fig_bar, ax_bar = plt.subplots(figsize=(9, 5))
-        bars = ax_bar.bar(["Base Plant Configuration", "Integrated HEN Structure"], [total_10_base, total_10_integrated], color=["#D9534F", "#5CB85C"], width=0.4)
-        ax_bar.set_ylabel("Total 10-Year Cumulative Expenditure (€)")
-        ax_bar.grid(axis='y', linestyle=':', alpha=0.5)
+        bars_cap = ax_capex.bar(
+            ["Base System (No Integration)", "Integrated HEN System"], 
+            [0.0, capex_investment], 
+            color=["#777777", "#428BCA"], 
+            width=0.4
+        )
+        ax_capex.set_ylabel("Initial Capital Investment (€)", weight="bold")
+        ax_capex.grid(axis='y', linestyle=':', alpha=0.5)
         
-        for bar in bars:
+        for bar in bars_cap:
             yval = bar.get_height()
-            ax_bar.text(bar.get_x() + bar.get_width()/2, yval + (total_10_base * 0.02), f"EUR {yval:,.0f}", ha='center', va='bottom', weight='bold')
+            ax_capex.text(bar.get_x() + bar.get_width()/2, yval + (capex_investment * 0.02 if capex_investment > 0 else 1000), f"€{yval:,.0f}", ha='center', va='bottom', weight='bold')
             
-        st.pyplot(fig_bar)
-
+        st.pyplot(fig_capex)
+        st.caption("Represents the asset hardware installation cost (New Heat Exchangers + Area adjustments).")
