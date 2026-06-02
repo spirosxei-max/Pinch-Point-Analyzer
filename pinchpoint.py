@@ -9,13 +9,12 @@ st.title("🔥 Advanced Pinch Point Analysis & HEN Optimizer")
 st.write("Σχεδιασμός Δικτύων Εναλλακτών Θερμότητας με Δυναμικά Ρεύματα, Δυναμικά Φορτία Μονάδας & GCC")
 
 # --- ΤΑΜΠΛΟ ΔΕΔΟΜΕΝΩΝ (2 ΠΙΝΑΚΕΣ) ---
-col_table1, col_table2 = st.columns()
+col_table1, col_table2 = st.columns(2)
 
 with col_table1:
     st.header("📋 1. Δεδομένα Ρευμάτων Εισόδου")
     st.write("Εισάγετε τα ρεύματα με βάση το Θερμικό Φορτίο (kW) όπως στο PDF.")
     
-    # Χρησιμοποιούμε απλά ονόματα στηλών (English keys) για ασφάλεια στον κώδικα
     default_streams = pd.DataFrame([
         {"name": "E1", "tin": 133.0, "tout": 20.0, "q_load": 594.0},
         {"name": "E2", "tin": 116.0, "tout": 25.0, "q_load": 890.8},
@@ -26,7 +25,6 @@ with col_table1:
         {"name": "E7", "tin": 250.0, "tout": 30.0, "q_load": 21434.7}
     ])
     
-    # Αλλάζουμε ΜΟΝΟ την εμφάνιση των τίτλων για τον χρήστη
     edited_df = st.data_editor(
         default_streams, 
         num_rows="dynamic", 
@@ -78,7 +76,7 @@ if edited_df is not None and not edited_df.empty:
             
             streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
         except (ValueError, TypeError, KeyError):
-            continue # Αγνοεί τυχόν μισοσυμπληρωμένες γραμμές χωρίς να κρασάρει
+            continue
 
 # --- ΑΣΦΑΛΗΣ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΛΟΙΠΩΝ ΕΞΑΡΤΗΜΑΤΩΝ ---
 other_components = []
@@ -223,3 +221,4 @@ with tab4:
     ax2.set_title(f"ΜΕΤΑ την Ολοκλήρωση\n(Σύνολο: {total_after:.2f} MW)")
     
     st.pyplot(fig_pie)
+    st.info(f"💡 Συνολική μείωση απαιτούμενης ισχύος της μονάδας: **{total_before - total_after:.2f} MW**")
