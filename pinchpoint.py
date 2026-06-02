@@ -10,7 +10,7 @@ st.set_page_config(layout="wide")
 st.title("🔥 Advanced Pinch Point Analysis & Industrial HEN Optimizer")
 st.write("Enterprise Heat Exchanger Network (HEN) Design with Economic Targeting, Excel I/O & PDF Reporting")
 
-# --- ΣΥΝΑΡΤΗΣΕΙΣ EXPORT (EXCEL & PDF) ---
+# --- EXPORT FUNCTIONS (EXCEL & PDF) ---
 def to_excel(df_streams, df_comps, econ_summary):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -42,10 +42,7 @@ def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
         pdf.cell(40, 10, f"{key}: {clean_val}")
         pdf.ln(10)
         
-    # Μετατροπή της εξόδου σε καθαρά bytes (bytes object) για το Streamlit
-    pdf_bytes = bytes(pdf.output())
-    return pdf_bytes
-
+    return bytes(pdf.output())
 
 # --- SIDEBAR CONFIGURATION & ECONOMIC INPUTS ---
 st.sidebar.header("⚙️ Model Configuration")
@@ -61,44 +58,51 @@ fixed_hex_cost = st.sidebar.number_input("Fixed Cost per Exchanger (€)", value
 area_cost_coeff = st.sidebar.number_input("Area Cost Coefficient (€/m²)", value=400)
 estimated_area = st.sidebar.number_input("Estimated Total New Area needed (m²)", value=250)
 
-# --- EXCEL IMPORT FUNCTIONALITY ---
+# --- INITIALIZATION AND BLANK STATE DATA TEMPLATES ---
 st.header("📥 Data Initialization")
+
+empty_streams = pd.DataFrame([
+    {"Stream Name": "", "Tin (°C)": None, "Tout (°C)": None, "Input Mode": "Heat Load (kW)", "Value": None}
+])
+
+empty_components = pd.DataFrame([
+    {"Component Name": "", "Load (MW)": None}
+])
+
+# Interactive button to instantly populate CAMERE benchmark data
+if st.button("💡 Load CAMERE Process Benchmark Data"):
+    st.session_state["streams_data"] = pd.DataFrame([
+        {"Stream Name": "E1", "Tin (°C)": 133.0, "Tout (°C)": 20.0, "Input Mode": "Heat Load (kW)", "Value": 594.0},
+        {"Stream Name": "E2", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 890.8},
+        {"Stream Name": "E3", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 891.3},
+        {"Stream Name": "E4", "Tin (°C)": 113.0, "Tout (°C)": 725.0, "Input Mode": "Heat Load (kW)", "Value": 13969.0},
+        {"Stream Name": "E5", "Tin (°C)": 725.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 19310.1},
+        {"Stream Name": "E6", "Tin (°C)": 58.0, "Tout (°C)": 250.0, "Input Mode": "Heat Load (kW)", "Value": 14518.1},
+        {"Stream Name": "E7", "Tin (°C)": 250.0, "Tout (°C)": 30.0, "Input Mode": "Heat Load (kW)", "Value": 21434.7}
+    ])
+    st.session_state["components_data"] = pd.DataFrame([
+        {"Component Name": "RWGS Reactor", "Load (MW)": 3.26},
+        {"Component Name": "MeOH Reactor", "Load (MW)": 10.50},
+        {"Component Name": "Compressors", "Load (MW)": 6.60},
+        {"Component Name": "Separators", "Load (MW)": 20.00}
+    ])
+
+# Handle Excel Upload
 uploaded_file = st.sidebar.file_uploader("Import Network Data from Excel", type=["xlsx"])
-
-# Set default data structures
-default_streams = pd.DataFrame([
-    {"Stream Name": "E1", "Tin (°C)": 133.0, "Tout (°C)": 20.0, "Input Mode": "Heat Load (kW)", "Value": 594.0},
-    {"Stream Name": "E2", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 890.8},
-    {"Stream Name": "E3", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 891.3},
-    {"Stream Name": "E4", "Tin (°C)": 113.0, "Tout (°C)": 725.0, "Input Mode": "Heat Load (kW)", "Value": 13969.0},
-    {"Stream Name": "E5", "Tin (°C)": 725.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 19310.1},
-    {"Stream Name": "E6", "Tin (°C)": 58.0, "Tout (°C)": 250.0, "Input Mode": "Heat Load (kW)", "Value": 14518.1},
-    {"Stream Name": "E7", "Tin (°C)": 250.0, "Tout (°C)": 30.0, "Input Mode": "Heat Load (kW)", "Value": 21434.7}
-])
-
-default_components = pd.DataFrame([
-    {"Component Name": "RWGS Reactor", "Load (MW)": 3.26},
-    {"Component Name": "MeOH Reactor", "Load (MW)": 10.50},
-    {"Component Name": "Compressors", "Load (MW)": 6.60},
-    {"Component Name": "Separators", "Load (MW)": 20.00}
-])
-
 if uploaded_file is not None:
     try:
-        imported_streams = pd.read_excel(uploaded_file, sheet_name=0)
-        imported_comps = pd.read_excel(uploaded_file, sheet_name=1)
-        st.success("🎉 Data successfully imported from Excel file!")
-        st.session_state["streams_data"] = imported_streams
-        st.session_state["components_data"] = imported_comps
+        st.session_state["streams_data"] = pd.read_excel(uploaded_file, sheet_name=0)
+        st.session_state["components_data"] = pd.read_excel(uploaded_file, sheet_name=1)
+        st.success("🎉 Data successfully imported from Excel sheets!")
     except Exception as e:
-        st.error(f"Error parsing file. Please check sheets format. Details: {e}")
+        st.error(f"Excel parsing failure. Check sheets layout. Error: {e}")
 
 if "streams_data" not in st.session_state:
-    st.session_state["streams_data"] = default_streams
+    st.session_state["streams_data"] = empty_streams
 if "components_data" not in st.session_state:
-    st.session_state["components_data"] = default_components
+    st.session_state["components_data"] = empty_components
 
-# --- DATA PANELS ---
+# --- GUI INPUT MATRIX DATA EDITORS ---
 col_table1, col_table2 = st.columns(2)
 
 with col_table1:
@@ -109,7 +113,7 @@ with col_table2:
     st.subheader("⚡ 2. Other Process Components")
     edited_components_df = st.data_editor(st.session_state["components_data"], num_rows="dynamic", use_container_width=True, key="components_editor")
 
-# --- RAW DATA CONVERSION ---
+# --- RAW SYSTEM INPUT DATA CONVERSION ---
 streams = {}
 stream_names_list = []
 if edited_df is not None and not edited_df.empty:
@@ -122,26 +126,36 @@ if edited_df is not None and not edited_df.empty:
             val = abs(float(row["Value"]))
             name = str(row["Stream Name"])
             itype = row["Input Mode"]
+            
             stream_type = "Hot" if tin > tout else "Cold"
             dT_stream = abs(tin - tout)
+            
             if itype == "Cp (kW/°C)":
                 cp = val
                 q = cp * dT_stream
             else:
                 q = val
                 cp = q / dT_stream if dT_stream > 0 else 0.0
+                
             streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
             stream_names_list.append(name)
         except Exception:
             continue
 
 other_components = []
-for _, row in edited_components_df.dropna(subset=["Component Name", "Load (MW)"]).iterrows():
-    if str(row["Component Name"]).strip() != "":
-        other_components.append({"name": str(row["Component Name"]), "mw": abs(float(row["Load (MW)"]))})
+if edited_components_df is not None and not edited_components_df.empty:
+    valid_comp_df = edited_components_df.dropna(subset=["Component Name", "Load (MW)"])
+    valid_comp_df = valid_comp_df[valid_comp_df["Component Name"].astype(str).str.strip() != ""]
+    for _, row in valid_comp_df.iterrows():
+        try:
+            other_components.append({"name": str(row["Component Name"]), "mw": abs(float(row["Load (MW)"]))})
+        except Exception:
+            continue
 
+# --- BLANK STATE INTERACTION CONTROL ---
 if len(streams) < 2:
-    st.info("📌 **Waiting for valid input matrix...** Fill out the tables above to generate thermodynamic and financial charts.")
+    st.markdown("---")
+    st.info("📌 **Waiting for user input matrix...** Please add your stream details above or click **'Load CAMERE Process Benchmark Data'** to explore the charts.")
     st.stop()
 
 # --- THERMODYNAMIC PINCH CALCULATIONS ---
@@ -159,7 +173,8 @@ for i in range(len(intervals) - 1):
     dh_intervals.append((cp_hot - cp_cold) * dT)
 
 cascade = [0.0]
-for dh in dh_intervals: cascade.append(cascade[-1] + dh)
+for dh in dh_intervals: 
+    cascade.append(cascade[-1] + dh)
 qh_min = -min(cascade) if min(cascade) < 0 else 0
 feasible_cascade = [c + qh_min for c in cascade]
 qc_min = feasible_cascade[-1]
@@ -174,7 +189,7 @@ except Exception:
 total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
 total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
 
-# --- FINANCIAL TARGETING LOGIC ---
+# --- FINANCIAL ACCELERATION LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
 annual_savings = op_cost_before - op_cost_after
@@ -191,45 +206,47 @@ econ_summary = {
     "Simple Payback Period": f"{payback_period_years:.2f} Years"
 }
 
-# --- METRIC DISPLAY ---
+# --- METRIC EXPOSURE ---
 st.header("📊 Performance Metrics")
 m1, m2, m3 = st.columns(3)
 m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C")
 m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Payback: {payback_period_years:.2f} yrs")
-m3.metric("True Total Exchangers", f"{hx_process_count + 6} Units")
+m3.metric("True Total Exchangers Required", f"{hx_process_count + 6} Units")
 
-# --- EXPORT INTERFACE ---
-st.subheader("💾 Export Infrastructure")
+# --- DOWNLOAD PIPELINES ---
+st.subheader("💾 Cloud Reporting Infrastructure")
 excel_data = to_excel(edited_df, edited_components_df, econ_summary)
 pdf_data = create_pdf(econ_summary, qh_min, qc_min, pinch_hot, pinch_cold)
 
 c_exp1, c_exp2 = st.columns(2)
 with c_exp1:
-    st.download_button(label="📥 Download Data & Results (Excel)", data=excel_data, file_name="HEN_Optimization_Framework.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.download_button(label="📥 Download Data & Financial Targets (Excel)", data=excel_data, file_name="HEN_Optimization_Framework.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 with c_exp2:
-    st.download_button(label="📥 Download Executive Summary (PDF)", data=pdf_data, file_name="Pinch_Analysis_Report.pdf", mime="application/pdf")
+    st.download_button(label="📥 Download Executive Technical Report (PDF)", data=pdf_data, file_name="Pinch_Analysis_Report.pdf", mime="application/pdf")
 
 # --- GRAPHICAL ANALYTICAL TABS ---
 st.header("📈 Thermodynamic, Financial & Network Visualizations")
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Composite Curves", "📉 Grand Composite Curve (GCC)", "🕸️ HEN Grid Layout", "🍕 Energy Allocation (Pies)", "💰 Capital vs Operating Economics"])
 
 with tab1:
-    # (The standard composite curve script runs unchanged)
+    st.subheader("Temperature - Enthalpy Cumulative Diagrams (T-H Curves)")
     hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=True)
     hot_H = [0.0]
     for i in range(len(hot_intervals)-1):
         Th, Tl = hot_intervals[i], hot_intervals[i+1]
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Hot" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         hot_H.append(hot_H[-1] + cp_sum * (Th - Tl))
+        
     cold_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + [s["Tout"] for s in streams.values() if s["type"]=="Cold"])), reverse=True)
     cold_H = [qc_min]
     for i in range(len(cold_intervals)-1):
         Th, Tl = cold_intervals[i], cold_intervals[i+1]
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Cold" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         cold_H.append(cold_H[-1] + cp_sum * (Th - Tl))
-    fig_cc, ax_cc = plt.subplots(figsize=(10, 3.5))
-    ax_cc.plot(hot_H, hot_intervals, color="red", label="Hot Composite Curve", lw=2)
-    ax_cc.plot(cold_H, cold_intervals, color="blue", label="Cold Composite Curve", lw=2)
+        
+    fig_cc, ax_cc = plt.subplots(figsize=(10, 4))
+    ax_cc.plot(hot_H, hot_intervals, color="red", label="Hot Composite Curve", lw=2.5)
+    ax_cc.plot(cold_H, cold_intervals, color="blue", label="Cold Composite Curve", lw=2.5)
     ax_cc.set_xlabel("Enthalpy Cumulative (kW)")
     ax_cc.set_ylabel("Temperature (°C)")
     ax_cc.legend()
@@ -237,10 +254,11 @@ with tab1:
     st.pyplot(fig_cc)
 
 with tab2:
-    fig_gcc, ax_gcc = plt.subplots(figsize=(10, 3.5))
+    st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
+    fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
-    ax_gcc.plot([0, qh_min], [intervals, intervals], color="red", lw=2.5, linestyle="-", marker="s", label="Hot Utility Line")
-    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label="Cold Utility Line")
+    ax_gcc.plot([0, qh_min], [intervals, intervals], color="red", lw=2.5, linestyle="-", marker="s", label="Hot Utility Line (Qh,min)")
+    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label="Cold Utility Line (Qc,min)")
     ax_gcc.set_xlabel("ΔΗ (kW)")
     ax_gcc.set_ylabel("Shifted Temperature T* (°C)")
     ax_gcc.grid(True, linestyle=":", alpha=0.6)
@@ -248,78 +266,127 @@ with tab2:
     st.pyplot(fig_gcc)
 
 with tab3:
-    fig_grid, ax_grid = plt.subplots(figsize=(12, 5))
+    st.subheader("Heat Exchanger Network (HEN) Grid Layout & True Inventory")
+    fig_grid, ax_grid = plt.subplots(figsize=(12, 6))
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
+    
     for name, s in streams.items():
         y = y_pos[name]
         ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
         ax_grid.text(s["Tin"], y + 0.15, f"{name} ({s['Tin']}°C)", fontsize=9, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+        ax_grid.text(s["Tout"], y - 0.25, f"{s['Tout']}°C", fontsize=9, ha='left' if s["type"]=="Hot" else 'right')
+        
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.7, lw=2)
-    
-    # Simple conditional index matching representation
+        ax_grid.text(pinch_hot, len(streams) + 0.5, f"Pinch ({pinch_hot}°C)", color="gray", ha="center", weight="bold")
+
+    # Dynamic index-based process heat recovery connections
+    hx_count = 0
     if len(stream_names_list) >= 7:
-        ax_grid.plot([450, 450], [y_pos[stream_names_list[4]], y_pos[stream_names_list[3]]], color="green", marker="o", lw=2)
-        ax_grid.plot([150, 150], [y_pos[stream_names_list[6]], y_pos[stream_names_list[5]]], color="green", marker="o", lw=2)
-    
+        index_matches = [
+            (stream_names_list[4], stream_names_list[3], 450), 
+            (stream_names_list[6], stream_names_list[5], 150)
+        ]
+    else:
+        index_matches = []
+        hot_st = [n for n in stream_names_list if streams[n]["type"]=="Hot"]
+        cold_st = [n for n in stream_names_list if streams[n]["type"]=="Cold"]
+        for i in range(min(len(hot_st), len(cold_st))):
+            index_matches.append((hot_st[i], cold_st[i], (streams[hot_st[i]]["Tin"] + streams[cold_st[i]]["Tin"])/2))
+
+    for hot_st, cold_st, x_pos in index_matches:
+        if hot_st in y_pos and cold_st in y_pos:
+            hx_count += 1
+            y_hot = y_pos[hot_st]
+            y_cold = y_pos[cold_st]
+            ax_grid.plot([x_pos, x_pos], [y_hot, y_cold], color="green", linestyle="-", lw=2, zorder=3)
+            ax_grid.plot([x_pos, x_pos], [y_hot, y_cold], marker="o", color="green", markersize=10, zorder=4)
+            ax_grid.text(x_pos + 6, (y_hot + y_cold)/2, f"HX {hx_count}", color="green", weight="bold", fontsize=10)
+
+    # Rendering Auxiliary Units (Heaters / Coolers)
+    hu_count, cu_count = 0, 0
+    for name, s in streams.items():
+        y = y_pos[name]
+        if s["type"] == "Cold" and s["Tout"] > 400: 
+            hu_count += 1
+            hu_x = s["Tout"] - 30
+            ax_grid.plot(hu_x, y, marker="o", color="darkred", markersize=11, zorder=5)
+            ax_grid.text(hu_x, y + 0.15, f"HU {hu_count}", color="darkred", weight="bold", fontsize=9, ha="center")
+        if s["type"] == "Hot" and s["Tout"] < 40: 
+            cu_count += 1
+            cu_x = s["Tout"] + 15
+            ax_grid.plot(cu_x, y, marker="o", color="blue", markersize=11, zorder=5)
+            ax_grid.text(cu_x, y + 0.15, f"CU {cu_count}", color="blue", weight="bold", fontsize=9, ha="center")
+
     ax_grid.set_yticks(list(y_pos.values()))
     ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
-    ax_grid.set_ylim(0.5, len(streams) + 0.8)
+    ax_grid.set_xlabel("Temperature (°C)", weight="bold")
+    ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
     st.pyplot(fig_grid)
+    st.success(f"Network Balance Inventory -> Process Exchangers: {hx_count} | Heaters (HU): {hu_count} | Coolers (CU): {cu_count} || Total Fleet: {hx_count + hu_count + cu_count}")
 
 with tab4:
-    # (The optimized allocation pie charts script)
+    st.subheader("Global Process Energy Allocation (Pie Charts)")
     labels = ['Hot Utilities', 'Cold Utilities'] + [c["name"] for c in other_components]
     sizes_before = [total_cold_load / 1000, total_hot_load / 1000] + [c["mw"] for c in other_components]
     sizes_after = [qh_min / 1000, qc_min / 1000] + [c["mw"] for c in other_components]
-    fig_pie, (ax_p1, ax_p2) = plt.subplots(1, 2, figsize=(12, 5))
-    ax_p1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=['#FF0000', '#0070C0', '#FFC000', '#7030A0'])
-    ax_p1.set_title("Before Heat Integration", weight='bold')
-    ax_p2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=['#FF0000', '#0070C0', '#FFC000', '#7030A0'])
-    ax_p2.set_title("After Heat Integration", weight='bold')
+    
+    total_before = sum(sizes_before)
+    total_after = sum(sizes_after)
+    
+    colors_map = ['#FF0000', '#0070C0', '#FFC000', '#7030A0', '#ED7D31', '#70AD47']
+    if len(labels) > len(colors_map):
+        colors_map += plt.cm.Accent(np.linspace(0, 1, len(labels) - len(colors_map))).tolist()
+    current_colors = colors_map[:len(labels)]
+    
+    fig_pie, (ax_p1, ax_p2) = plt.subplots(1, 2, figsize=(14, 6))
+    ax_p1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors)
+    ax_p1.set_title(f"Before Heat Integration\n(Total: {total_before:.2f} MW)", weight='bold')
+    
+    ax_p2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors)
+    ax_p2.set_title(f"After Heat Integration\n(Total: {total_after:.2f} MW)", weight='bold')
+    
     fig_pie.legend(labels=labels, loc='lower center', ncol=3)
+    plt.subplots_adjust(bottom=0.2)
     st.pyplot(fig_pie)
 
 with tab5:
     st.subheader("💰 Financial Analysis & Capital Payback Framework")
     col_g1, col_g2 = st.columns(2)
-    
     years_range = np.arange(0, 11)
     
     with col_g1:
-        st.markdown("**Cumulative Cash Flow Curve (Break-Even Evaluation)**")
-        # Curve 1: Do Nothing (Base Operating cost accumulation starting from 0)
-        cash_no_integration = -(op_cost_before * years_range)
-        # Curve 2: Integrate (Pay CAPEX upfront, then accumulate lower operating costs)
-        cash_integrated = -capex_investment - (op_cost_after * years_range)
+        st.markdown("**Cumulative Spending Horizon (Positive Cost Accumulation)**")
+        spending_no_integration = op_cost_before * years_range
+        spending_integrated = capex_investment + (op_cost_after * years_range)
         
         fig_cash, ax_cash = plt.subplots(figsize=(10, 5))
-        ax_cash.plot(years_range, cash_no_integration, color="red", linestyle="--", label="Option A: Base Plant (No Integration)", lw=2)
-        ax_cash.plot(years_range, cash_integrated, color="green", label="Option B: HEN Integration (CAPEX Invested)", lw=2.5)
+        ax_cash.plot(years_range, spending_no_integration, color="red", linestyle="--", label="Option A: Base Plant (Unintegrated Bills)", lw=2)
+        ax_cash.plot(years_range, spending_integrated, color="green", label="Option B: HEN Integration (CAPEX Invested)", lw=2.5)
         
         if payback_period_years <= 10:
             ax_cash.axvline(x=payback_period_years, color="black", linestyle=":", alpha=0.8)
-            ax_cash.text(payback_period_years + 0.2, max(cash_integrated)/2, f"Break-Even Point\n({payback_period_years:.2f} Years)", color="black", weight="bold")
+            ax_cash.text(payback_period_years + 0.2, capex_investment * 1.5, f"Break-Even Point\n({payback_period_years:.2f} Years)", color="black", weight="bold")
             
         ax_cash.set_xlabel("Operating Years")
-        ax_cash.set_ylabel("Cumulative Cost Burden (€)")
+        ax_cash.set_ylabel("Total Financial Spending Burden (€)")
         ax_cash.grid(True, linestyle=":", alpha=0.6)
         ax_cash.legend()
         st.pyplot(fig_cash)
         
     with col_g2:
-        st.markdown("**Total Cost of Ownership Comparison (10-Year Lifecycle horizon)**")
-        # 10 Year life cycle cost evaluation
+        st.markdown("**Total Cost of Ownership Comparison (10-Year Lifecycle Horizon)**")
         total_10_base = op_cost_before * 10
         total_10_integrated = capex_investment + (op_cost_after * 10)
         
         fig_bar, ax_bar = plt.subplots(figsize=(9, 5))
-        bars = ax_bar.bar(["Base Plant Configuration", "Integrated HEN Structure"], [total_10_base, total_10_integrated], color=["#D9534F", "#5CB85C"], width=0.5)
-        ax_bar.set_ylabel("Total 10-Year Lifecycle Cost (€)")
+        bars = ax_bar.bar(["Base Plant Configuration", "Integrated HEN Structure"], [total_10_base, total_10_integrated], color=["#D9534F", "#5CB85C"], width=0.4)
+        ax_bar.set_ylabel("Total 10-Year Cumulative Expenditure (€)")
         ax_bar.grid(axis='y', linestyle=':', alpha=0.5)
         
         for bar in bars:
             yval = bar.get_height()
-            ax_bar.text(bar.get_x() + bar.get_width()/2, yval + (total_10_base*0.02), f"€{yval:,.0f}", ha='center', va='bottom', weight='bold')
+            ax_bar.text(bar.get_x() + bar.get_width()/2, yval + (total_10_base * 0.02), f"EUR {yval:,.0f}", ha='center', va='bottom', weight='bold')
             
         st.pyplot(fig_bar)
+
