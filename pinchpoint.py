@@ -8,7 +8,7 @@ from fpdf import FPDF
 st.set_page_config(layout="wide")
 
 st.title("🔥 Enterprise Pinch Point Analyzer & HEN Synthesizer")
-st.write("Industrial Heat Exchanger Network Design with Dynamic Interactive Economic Targeting & Automated Grid Generation")
+st.write("Industrial Heat Exchanger Network Design with Dynamic 5-Year Horizons & Clean Utility Layouts")
 
 # --- EXECUTIVE PDF REPORT GENERATION ---
 def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
@@ -130,7 +130,7 @@ if edited_components_df is not None and not edited_components_df.empty:
 # --- BLANK STATE INTERACTION CONTROL ---
 if len(streams) < 2:
     st.markdown("---")
-    st.info("📌 **Waiting for user input matrix...** Please insert your operational parameters or parse an external spreadsheet above to initialize visual architectures.")
+    st.info("📌 **Waiting for user input matrix...** Please add your stream details above or upload an Excel file to generate analysis.")
     st.stop()
 
 # --- THERMODYNAMIC PINCH CALCULATIONS ---
@@ -160,22 +160,21 @@ try:
     pinch_cold = intervals[pinch_index] - dT_min / 2
 except Exception:
     pinch_hot, pinch_cold = "N/A", "N/A"
-
-total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
-total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
 # --- FINANCIAL ACCELERATION LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
 annual_savings = op_cost_before - op_cost_after
 
-# Hardware counts driven algorithmically from user metrics matrix
+# Dynamically count pure user hot and cold stream categories
+hot_st = [n for n in stream_names_list if streams[n]["type"] == "Hot"]
+cold_st = [n for n in stream_names_list if streams[n]["type"] == "Cold"]
+
+# Base plant CAPEX requires an exchanger for every single stream (Heaters & Coolers)
 base_hex_count = len(stream_names_list)
 capex_base = (base_hex_count * fixed_hex_cost) + (estimated_area_base * area_cost_coeff)
 
-hot_streams_count = len([n for n in stream_names_list if streams[n]["type"] == "Hot"])
-cold_streams_count = len([n for n in stream_names_list if streams[n]["type"] == "Cold"])
-hx_process_count = min(hot_streams_count, cold_streams_count)
-
+# Integrated plant CAPEX requires 1 process exchanger per valid hot/cold combination pair
+hx_process_count = min(len(hot_st), len(cold_st))
 integrated_total_hex = hx_process_count + base_hex_count 
 capex_integrated = (integrated_total_hex * fixed_hex_cost) + (estimated_area_integrated * area_cost_coeff)
 payback_period_years = (capex_integrated - capex_base) / annual_savings if annual_savings > 0 else float('inf')
@@ -231,12 +230,12 @@ with tab1:
 
 with tab2:
     st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
-    fig_gcc, ax_gcc = plt.subplots(figsize=(10, 4.5))
+    fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-    # Static endpoints parsing explicitly avoids multi-line duplication artifacts
-    ax_gcc.plot([0, qh_min], [intervals, intervals], color="red", lw=2.5, linestyle="-", label=f"Hot Utility ({qh_min:,.1f} kW)")
-    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", label=f"Cold Utility ({qc_min:,.1f} kW)")
+    # GCC PERFECT FIX: Single standalone baseline vectors mapped explicitly outside loops
+    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
+    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
     ax_gcc.set_ylabel("Shifted Temperature T* (°C)")
@@ -245,53 +244,46 @@ with tab2:
     st.pyplot(fig_gcc)
 
 with tab3:
-    st.subheader("Heat Exchanger Network (HEN) Automatic Synthesis Layout")
+    st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
     fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    # Process stream rendering
+    # Draw process streams horizontally
     for name, s in streams.items():
         y = y_pos[name]
         ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
         ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
         
+        # Display dynamic input/output temperatures at utility boundaries explicitly
+        ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+        ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
+        
         if s["type"] == "Cold":
             ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred", weight="bold")
         else:
             ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
-            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="dodgerblue", weight="bold")
 
-    # --- AUTOMATED PROCESS-TO-PROCESS INTER-STREAM COUPLING MAP ---
-    hot_st = [n for n in stream_names_list if streams[n]["type"]=="Hot"]
-    cold_st = [n for n in stream_names_list if streams[n]["type"]=="Cold"]
-    
-    hx_idx = 0
-    for i in range(min(len(hot_st), len(cold_st))):
+    # --- DYNAMIC PROCESS-TO-PROCESS CONNECTIONS BASE LINE ---
+    for i in range(hx_process_count):
         h_name, c_name = hot_st[i], cold_st[i]
-        h_s, c_s = streams[h_name], streams[c_name]
-        
-        match_temp = (max(h_s["Tout"], c_s["Tin"]) + min(h_s["Tin"], c_s["Tout"])) / 2
-        if min(h_s["Tin"], h_s["Tout"]) <= match_temp <= max(h_s["Tin"], h_s["Tout"]):
-            hx_idx += 1
-            y_h = y_pos[h_name]
-            y_c = y_pos[c_name]
-            ax_grid.plot([match_temp, match_temp], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
-            ax_grid.plot([match_temp, match_temp], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
+        y_h, y_c = y_pos[h_name], y_pos[c_name]
+        # Draw clean pairing line mid-scale vertically
+        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+        ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
+        ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
+        ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
     
-    # Standard consolidated unified legend architecture at base (FIXED SYNTAX)
+    # Custom Consolidated Legend Matrix
     from matplotlib.lines import Line2D
     custom_legend = [
         Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
         Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
         Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
     ]
-    ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=3, fontsize=9)
+    ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
     
     ax_grid.set_yticks(list(y_pos.values()))
     ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
@@ -322,40 +314,38 @@ with tab4:
     st.pyplot(fig_pie)
 
 with tab5:
-    st.subheader("💰 Non-Accumulative Interactive Financial Projections")
+    st.subheader("💰 Isolated 5-Year Financial Asset Horizons")
     col_g1, col_g2 = st.columns(2)
-    years_range = list(range(0, 11))
+    years_range = list(range(0, 6)) # Rigorously bounded 5-year timeline matrix (0 to 5)
     
-    # Isolated trajectories generation
+    # Financial tracking vectors formulation based on clean accumulation laws
     base_capex_vector = [capex_base] * len(years_range)
-    base_opex_vector = [op_cost_before] * len(years_range)
-    base_opex_vector[0] = 0 # Year 0 tracking only equipment CAPEX injection
+    base_opex_vector = [op_cost_before * y for y in years_range] # OPEX accumulates yearly starting from 0
     
     int_capex_vector = [capex_integrated] * len(years_range)
-    int_opex_vector = [op_cost_after] * len(years_range)
-    int_opex_vector[0] = 0
+    int_opex_vector = [op_cost_after * y for y in years_range] # OPEX accumulates yearly starting from 0
     
     with col_g1:
-        st.markdown("**1. Unintegrated Base Plant Cost Profile**")
+        st.markdown("**1. Unintegrated Base Plant Cost Profile (5-Year)**")
         df_base_financials = pd.DataFrame({
             "Operating Year": years_range,
-            "Pure CAPEX Asset Value (€)": base_capex_vector,
-            "Annual Running Utilities (OPEX) (€/yr)": base_opex_vector
+            "Constant Equipment CAPEX (€)": base_capex_vector,
+            "Accumulated Running Utilities (OPEX) (€)": base_opex_vector
         })
         df_base_financials.set_index("Operating Year", inplace=True)
-        
-        # Interactive cloud data frame line plot integration
         st.line_chart(df_base_financials, color=["#777777", "#FF0000"])
-        st.caption("Hover over the line vectors to explore isolated tracking of CAPEX machinery alongside high recurring utility demands.")
+
+total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
+total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
+        st.caption("CAPEX is constant (flat line). OPEX scales up linearly from Year 0 representing cumulative energy bills.")
         
     with col_g2:
-        st.markdown("**2. Integrated HEN System Financial Profile**")
+        st.markdown("**2. Integrated HEN System Financial Profile (5-Year)**")
         df_int_financials = pd.DataFrame({
             "Operating Year": years_range,
-            "Upfront Fixed CAPEX (€)": int_capex_vector,
-            "Optimized Running Utilities (OPEX) (€/yr)": int_opex_vector
+            "Constant Equipment CAPEX (€)": int_capex_vector,
+            "Accumulated Running Utilities (OPEX) (€)": int_opex_vector
         })
         df_int_financials.set_index("Operating Year", inplace=True)
-        
         st.line_chart(df_int_financials, color=["#428BCA", "#5CB85C"])
-        st.caption("Displays the step-change upgrade: higher equipment allocation CAPEX contrasted against heavily minimized operational OPEX.")
+        st.caption("CAPEX is higher but fixed. OPEX accumulates at a much lower slope, optimizing long-term lifecycle spending.")
