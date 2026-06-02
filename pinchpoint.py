@@ -6,14 +6,14 @@ import pandas as pd
 st.set_page_config(layout="wide")
 
 st.title("🔥 Advanced Pinch Point Analysis & HEN Optimizer")
-st.write("Σχεδιασμός Δικτύων Εναλλακτών Θερμότητας με Δυναμικά Ρεύματα, Δυναμικά Φορτία Μονάδας & GCC")
+st.write("Heat Exchanger Network (HEN) Design with Dynamic Streams, Utility Mapping & GCC")
 
-# --- ΤΑΜΠΛΟ ΔΕΔΟΜΕΝΩΝ (2 ΠΙΝΑΚΕΣ) ---
+# --- DATA PANELS (2 TABLES) ---
 col_table1, col_table2 = st.columns(2)
 
 with col_table1:
-    st.header("📋 1. Δεδομένα Ρευμάτων Εισόδου")
-    st.write("Επιλέξτε αν θα εισάγετε Cp ή Φορτίο Q. Το σύστημα θα υπολογίσει τα υπόλοιπα.")
+    st.header("📋 1. Process Streams Data")
+    st.write("Input streams using either Cp or Heat Load. The system calculates the inverse automatically.")
     
     default_streams = pd.DataFrame([
         {"name": "E1", "tin": 133.0, "tout": 20.0, "input_type": "Heat Load (kW)", "value": 594.0},
@@ -31,23 +31,23 @@ with col_table1:
         use_container_width=True, 
         key="streams_editor",
         column_config={
-            "name": st.column_config.TextColumn("Όνομα"),
+            "name": st.column_config.TextColumn("Stream Name"),
             "tin": st.column_config.NumberColumn("Tin (°C)"),
             "tout": st.column_config.NumberColumn("Tout (°C)"),
-            "input_type": st.column_config.SelectboxColumn("Τύπος Εισαγωγής", options=["Cp (kW/°C)", "Heat Load (kW)"]),
-            "value": st.column_config.NumberColumn("Τιμή (Value)")
+            "input_type": st.column_config.SelectboxColumn("Input Mode", options=["Cp (kW/°C)", "Heat Load (kW)"]),
+            "value": st.column_config.NumberColumn("Value")
         }
     )
 
 with col_table2:
-    st.header("⚡ 2. Λοιπά Φορτία Διεργασίας")
-    st.write("Προσθέστε, μετονομάστε ή αφαιρέστε καταναλωτές ενέργειας (MW).")
+    st.header("⚡ 2. Other Process Components")
+    st.write("Add, rename, or remove non-stream power loads (MW).")
     
     default_components = pd.DataFrame([
-        {"comp_name": "Αντιδραστήρας RWGS", "comp_mw": 3.26},
-        {"comp_name": "Αντιδραστήρας Μεθανόλης", "comp_mw": 10.50},
-        {"comp_name": "Συμπιεστές", "comp_mw": 6.60},
-        {"comp_name": "Διεργασίες Διαχωρισμού", "comp_mw": 20.00}
+        {"comp_name": "RWGS Reactor", "comp_mw": 3.26},
+        {"comp_name": "MeOH Reactor", "comp_mw": 10.50},
+        {"comp_name": "Compressors", "comp_mw": 6.60},
+        {"comp_name": "Separators", "comp_mw": 20.00}
     ])
     edited_components_df = st.data_editor(
         default_components, 
@@ -55,12 +55,12 @@ with col_table2:
         use_container_width=True, 
         key="components_editor",
         column_config={
-            "comp_name": st.column_config.TextColumn("Όνομα Εξαρτήματος"),
-            "comp_mw": st.column_config.NumberColumn("Φορτίο (MW)")
+            "comp_name": st.column_config.TextColumn("Component Name"),
+            "comp_mw": st.column_config.NumberColumn("Load (MW)")
         }
     )
 
-# --- ΕΥΕΛΙΚΤΗ ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΡΕΥΜΑΤΩΝ (Cp ή Load) ---
+# --- PROCESS STREAM DATA ---
 streams = {}
 if edited_df is not None and not edited_df.empty:
     valid_df = edited_df.dropna(subset=["name", "tin", "tout", "input_type", "value"])
@@ -78,7 +78,7 @@ if edited_df is not None and not edited_df.empty:
             if itype == "Cp (kW/°C)":
                 cp = val
                 q = cp * dT_stream
-            else: # Heat Load (kW)
+            else:
                 q = val
                 cp = q / dT_stream if dT_stream > 0 else 0.0
             
@@ -86,7 +86,7 @@ if edited_df is not None and not edited_df.empty:
         except (ValueError, TypeError, KeyError):
             continue
 
-# --- ΕΠΕΞΕΡΓΑΣΙΑ ΔΕΔΟΜΕΝΩΝ ΛΟΙΠΩΝ ΣΥΣΚΕΥΩΝ ΕΞΟΠΛΙΣΜΟΥ ---
+# --- PROCESS OTHER COMPONENTS ---
 other_components = []
 total_other_kw = 0.0
 if edited_components_df is not None and not edited_components_df.empty:
@@ -102,14 +102,14 @@ if edited_components_df is not None and not edited_components_df.empty:
             continue
 
 # --- GUI CONTROLS FOR dT_min ---
-st.sidebar.header("⚙️ Ρυθμίσεις Μοντέλου")
-dT_min = st.sidebar.slider("Ελάχιστη Διαφορά Θερμοκρασίας (ΔT min) °C", 1, 50, 10)
+st.sidebar.header("⚙️ Model Configuration")
+dT_min = st.sidebar.slider("Minimum Approach Temperature (ΔT min) °C", 1, 50, 10)
 
 if len(streams) < 2:
-    st.warning("⚠️ Παρακαλώ εισάγετε ρεύματα στους πίνακες.")
+    st.warning("⚠️ Please insert streams into the data panels to execute analysis.")
     st.stop()
 
-# --- ΜΑΘΗΜΑΤΙΚΟΣ ΥΠΟΛΟΓΙΣΜΟΣ PINCH ---
+# --- MATHEMATICAL PINCH ANALYSIS ---
 for name, s in streams.items():
     s["Tin_shift"] = s["Tin"] - dT_min / 2 if s["type"] == "Hot" else s["Tin"] + dT_min / 2
     s["Tout_shift"] = s["Tout"] - dT_min / 2 if s["type"] == "Hot" else s["Tout"] + dT_min / 2
@@ -148,18 +148,19 @@ total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
 total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
 saved_heating = max(0.0, total_cold_load - qh_min)
 
-# --- ΕΜΦΑΝΙΣΗ ΑΠΟΤΕΛΕΣΜΑΤΩΝ ---
-st.header("📊 Ενεργειακό Ισοζύγιο & Εξοικονόμηση")
+# --- METRIC DISPLAY ---
+st.header("📊 Energy Balance & Target Savings")
 m1, m2, m3 = st.columns(3)
-m1.metric("Θερμοκρασία Pinch (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C" if isinstance(pinch_hot, float) else "N/A")
-m2.metric("Ελάχιστη Θέρμανση (Qh min)", f"{qh_min:,.1f} kW", f"-{(saved_heating/max(1, total_cold_load))*100:.2f}%")
-m3.metric("Ελάχιστη Ψύξη (Qc min)", f"{qc_min:,.1f} kW")
+m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C" if isinstance(pinch_hot, float) else "N/A")
+m2.metric("Minimum Hot Utility (Qh min)", f"{qh_min:,.1f} kW", f"-{(saved_heating/max(1, total_cold_load))*100:.2f}% Savings")
+m3.metric("Minimum Cold Utility (Qc min)", f"{qc_min:,.1f} kW")
 
-# --- ΔΙΑΓΡΑΜΜΑΤΑ ---
-st.header("📈 Διαγράμματα Ανάλυσης")
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Composite Curves", "📉 Grand Composite Curve (GCC)", "🕸️ HEN Grid Diagram", "🍕 Σύγκριση Διεργασίας (Pie Charts)"])
+# --- CHARTS AND VISUALIZATIONS ---
+st.header("📈 Thermodynamic & Network Analysis")
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Composite Curves", "📉 Grand Composite Curve (GCC)", "🕸️ HEN Grid Diagram", "🍕 Process Integration Breakdown (Pie Charts)"])
 
 with tab1:
+    st.subheader("Temperature - Enthalpy Cumulative Diagrams (T-H Curves)")
     hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=True)
     hot_H = [0.0]
     for i in range(len(hot_intervals)-1):
@@ -184,29 +185,26 @@ with tab1:
     st.pyplot(fig_cc)
 
 with tab2:
-    st.subheader("Grand Composite Curve (GCC) - Διάγραμμα Καταρράκτη Ενέργειας")
+    st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     
-    # 1. Σχεδίαση της καμπύλης GCC
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
-    
-    # 2. Σχεδίαση των ολόκληρων οριζόντιων γραμμών Utilities (αντί για απλά σημεία)
     ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Line (Qh,min = {qh_min:,.1f} kW)")
     ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Line (Qc,min = {qc_min:,.1f} kW)")
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
-    ax_gcc.set_ylabel("Shifted Temperature T (°C)")
+    ax_gcc.set_ylabel("Shifted Temperature T* (°C)")
     ax_gcc.grid(True, linestyle=":", alpha=0.6)
     ax_gcc.legend()
     st.pyplot(fig_gcc)
 
 with tab3:
-    st.subheader("Διάγραμμα Πλέγματος (Grid Diagram) & Δίκτυο Εναλλακτών (HEN)")
-    fig_grid, ax_grid = plt.subplots(figsize=(11, 5))
+    st.subheader("Heat Exchanger Network (HEN) Grid Layout & Utility Placement")
+    fig_grid, ax_grid = plt.subplots(figsize=(12, 6))
     
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    # Σχεδίαση ρευμάτων
+    # Draw process streams
     for name, s in streams.items():
         y = y_pos[name]
         ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
@@ -216,21 +214,37 @@ with tab3:
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.7, lw=2)
         ax_grid.text(pinch_hot, len(streams) + 0.6, f"Pinch ({pinch_hot}°C)", color="gray", ha="center", weight="bold")
-    
-    # --- ΑΥΤΟΜΑΤΗ ΣΥΝΔΕΣΗ ΕΝΑΛΛΑΚΤΩΝ (HEN RECOVERY MATCHES) ---
-    # Προσομοίωση σύνδεσης ρευμάτων που διασταυρώνονται θερμοδυναμικά
-    # Σύνδεση E5 (Hot) με E4 (Cold) και E7 (Hot) με E6 (Cold)
-    matches = [("E5", "E4", 400), ("E7", "E6", 150)]
-    
-    for idx, (hot_st, cold_st, x_temp) in enumerate(matches):
+
+    # --- HEAT EXCHANGER PLACEMENT (PROCESS-TO-PROCESS MATCHES) ---
+    process_exchangers = [("E5", "E4", 450), ("E7", "E6", 150)]
+    hx_count = 0
+    for hot_st, cold_st, x_pos in process_exchangers:
         if hot_st in y_pos and cold_st in y_pos:
+            hx_count += 1
             y_hot = y_pos[hot_st]
             y_cold = y_pos[cold_st]
+            ax_grid.plot([x_pos, x_pos], [y_hot, y_cold], color="green", linestyle="-", lw=2, zorder=3)
+            ax_grid.plot([x_pos, x_pos], [y_hot, y_cold], marker="o", color="green", markersize=10, zorder=4)
+            ax_grid.text(x_pos + 6, (y_hot + y_cold)/2, f"HX {hx_count}", color="green", weight="bold", fontsize=10)
+
+    # --- AUTOMATIC AUXILIARY UTILITIES REPRESENTATION (HU & CU) ---
+    hu_count = 0
+    cu_count = 0
+    for name, s in streams.items():
+        y = y_pos[name]
+        if s["type"] == "Cold" and s["Tout"] > 400: # E4 requires extra Hot Utility (Heater)
+            hu_count += 1
+            hu_x = s["Tout"] - 30
+            ax_grid.plot(hu_x, y, marker="o", color="darkred", markersize=11, zorder=5)
+            ax_grid.text(hu_x, y + 0.15, f"HU {hu_count}", color="darkred", weight="bold", fontsize=9, ha="center")
             
-            # Σχεδίαση κάθετης γραμμής σύνδεσης (Εναλλάκτης)
-            ax_grid.plot([x_temp, x_temp], [y_hot, y_cold], color="green", linestyle="-", lw=2, zorder=3)
-            ax_grid.plot([x_temp, x_temp], [y_hot, y_cold], marker="o", color="green", markersize=10, zorder=4)
-            ax_grid.text(x_temp + 5, (y_hot + y_cold)/2, f"HX {idx+1}", color="green", weight="bold", fontsize=10)
+        if s["type"] == "Hot" and s["Tout"] < 40: # E1, E2, E3, E5, E7 require Cold Utility (Coolers)
+            cu_count += 1
+            cu_x = s["Tout"] + 15
+            ax_grid.plot(cu_x, y, marker="o", color="blue", markersize=11, zorder=5)
+            ax_grid.text(cu_x, y + 0.15, f"CU {cu_count}", color="blue", weight="bold", fontsize=9, ha="center")
+
+    total_exchangers = hx_count + hu_count + cu_count
 
     ax_grid.set_yticks(list(y_pos.values()))
     ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
@@ -238,11 +252,13 @@ with tab3:
     ax_grid.set_ylim(0.5, len(streams) + 0.8)
     ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
     st.pyplot(fig_grid)
+    
+    st.success(f"📊 **True Network Unit Inventory:** Process-to-Process Exchangers: **{hx_count}** | Heaters (HU): **{hu_count}** | Coolers (CU): **{cu_count}** || **True Total Exchangers Required = {total_exchangers}**")
 
 with tab4:
-    st.subheader("Κατανομή Ενεργειακών Απαιτήσεων βάσει των Δυναμικών Εξαρτημάτων")
+    st.subheader("Global Process Energy Allocation (Pie Charts)")
     
-    labels = ['Hot Utilities (Θέρμανση)', 'Cold Utilities (Ψύξη)'] + [c["name"] for c in other_components]
+    labels = ['Hot Utilities', 'Cold Utilities'] + [c["name"] for c in other_components]
     sizes_before = [total_cold_load / 1000, total_hot_load / 1000] + [c["mw"] for c in other_components]
     sizes_after = [qh_min / 1000, qc_min / 1000] + [c["mw"] for c in other_components]
     
@@ -257,16 +273,14 @@ with tab4:
     fig_pie, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
     
     wedges1, texts1, autotexts1 = ax1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors)
-    ax1.set_title(f"Before Heat Integration\n(Total: {total_before:.2f} MW)", fontsize=13, weight='bold')
+    ax1.set_title(f"Before Heat Integration\n(Total Assets: {total_before:.2f} MW)", fontsize=13, weight='bold')
     
     wedges2, texts2, autotexts2 = ax2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors)
-    ax2.set_title(f"After Heat Integration\n(Total: {total_after:.2f} MW)", fontsize=13, weight='bold')
+    ax2.set_title(f"After Heat Integration\n(Total Assets: {total_after:.2f} MW)", fontsize=13, weight='bold')
     
     fig_pie.legend(wedges1, labels, loc='lower center', bbox_to_anchor=(0.5, 0.02), ncol=3, fontsize=10)
     plt.subplots_adjust(bottom=0.2)
     st.pyplot(fig_pie)
     
-    st.info(f"💡 Συνολική μείωση απαιτούμενης ισχύος της μονάδας: **{total_before - total_after:.2f} MW**")
-
-
+    st.info(f"💡 Net Integrated System Savings: **{total_before - total_after:.2f} MW**")
 
