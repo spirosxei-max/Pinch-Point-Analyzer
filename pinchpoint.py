@@ -51,7 +51,7 @@ area_cost_coeff = st.sidebar.number_input("Area Cost Coefficient (€/m²)", val
 estimated_area_base = st.sidebar.number_input("Base System Area needed (m²)", value=150)
 estimated_area_integrated = st.sidebar.number_input("Integrated System Area needed (m²)", value=250)
 
-# --- INITIALIZATION (PURE BLANK STATE) ---
+# --- INITIALIZATION (PURE BLANK STATE - NO HARDCODED VALUES) ---
 st.header("📥 Data Initialization")
 
 empty_streams = pd.DataFrame([
@@ -82,6 +82,8 @@ col_table1, col_table2 = st.columns(2)
 
 with col_table1:
     st.subheader("📋 1. Process Streams Data")
+    
+    # NEW: Using st.column_config.SelectboxColumn to enforce dropdown choices instead of typing
     edited_df = st.data_editor(
         st.session_state["streams_data"], 
         num_rows="dynamic", 
@@ -91,7 +93,11 @@ with col_table1:
             "Stream Name": st.column_config.TextColumn("Stream Name"),
             "Tin (°C)": st.column_config.NumberColumn("Tin (°C)"),
             "Tout (°C)": st.column_config.NumberColumn("Tout (°C)"),
-            "Input Mode": st.column_config.SelectboxColumn("Input Mode", options=["Heat Load (kW)", "Cp (kW/°C)"], required=True),
+            "Input Mode": st.column_config.SelectboxColumn(
+                "Input Mode", 
+                options=["Heat Load (kW)", "Cp (kW/°C)"],
+                required=True
+            ),
             "Value": st.column_config.NumberColumn("Value")
         }
     )
@@ -124,7 +130,7 @@ if edited_df is not None and not edited_df.empty:
                 q = val
                 cp = q / dT_stream if dT_stream > 0 else 0.0
                 
-            streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q, "Q_remaining": q}
+            streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
             stream_names_list.append(name)
         except Exception:
             continue
@@ -176,56 +182,20 @@ except Exception:
 total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
 total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
 
-# --- ALGORITHMIC PINCH DESIGN METHOD MATCHING (SEQUENTIAL UTILITY ALGORITHM) ---
-hot_st = [n for n in stream_names_list if streams[n]["type"] == "Hot"]
-cold_st = [n for n in stream_names_list if streams[n]["type"] == "Cold"]
-
-# Track generated units dynamically to prevent double counting
-hx_process_count = 0
-hu_count = 0
-cu_count = 0
-matches_to_plot = []
-heaters_to_plot = []
-coolers_to_plot = []
-
-# Step 1: Simulate process-to-process heat recovery matches based on thermodynamic layers
-for h_name in hot_st:
-    for c_name in cold_st:
-        h_s = streams[h_name]
-        c_s = streams[c_name]
-        
-        if h_s["Q_remaining"] > 0 and c_s["Q_remaining"] > 0:
-            # Determine maximum possible heat exchange between this pair
-            exchange_q = min(h_s["Q_remaining"], c_s["Q_remaining"])
-            h_s["Q_remaining"] -= exchange_q
-            c_s["Q_remaining"] -= exchange_q
-            
-            hx_process_count += 1
-            # Calculate geometric midpoint for plotting connection line
-            mid_x = (h_s["Tin"] + c_s["Tin"]) / 2
-            matches_to_plot.append((h_name, c_name, mid_x, hx_process_count))
-
-# Step 2: Determine auxiliary utility requirements based strictly on leftover load per stream
-for name in stream_names_list:
-    s = streams[name]
-    if s["Q_remaining"] > 1.0: # Significant unrecovered energy remains
-        if s["type"] == "Cold":
-            hu_count += 1
-            heaters_to_plot.append((name, hu_count))
-        else:
-            cu_count += 1
-            coolers_to_plot.append((name, cu_count))
-
-# Accurate Enterprise Cost Scaling Metrics
-base_hex_count = len(stream_names_list)
-capex_base = (base_hex_count * fixed_hex_cost) + (estimated_area_base * area_cost_coeff)
-
-integrated_total_hex = hx_process_count + hu_count + cu_count
-capex_integrated = (integrated_total_hex * fixed_hex_cost) + (estimated_area_integrated * area_cost_coeff)
-
+# --- FINANCIAL ACCELERATION LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
 annual_savings = op_cost_before - op_cost_after
+
+hot_st = [n for n in stream_names_list if streams[n]["type"] == "Hot"]
+cold_st = [n for n in stream_names_list if streams[n]["type"] == "Cold"]
+
+base_hex_count = len(stream_names_list)
+capex_base = (base_hex_count * fixed_hex_cost) + (estimated_area_base * area_cost_coeff)
+
+hx_process_count = min(len(hot_st), len(cold_st))
+integrated_total_hex = hx_process_count + base_hex_count 
+capex_integrated = (integrated_total_hex * fixed_hex_cost) + (estimated_area_integrated * area_cost_coeff)
 payback_period_years = (capex_integrated - capex_base) / annual_savings if annual_savings > 0 else float('inf')
 
 econ_summary = {
@@ -241,7 +211,7 @@ st.header("📊 Performance Metrics")
 m1, m2, m3 = st.columns(3)
 m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C")
 m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Incremental Payback: {payback_period_years:.2f} yrs")
-m3.metric("True Total Units (Base vs Integrated)", f"{base_hex_count} vs {integrated_total_hex} Units")
+m3.metric("True Network Units (Base vs Integrated)", f"{base_hex_count} vs {integrated_total_hex} Units")
 
 # --- DOWNLOAD PIPELINE ---
 st.subheader("💾 Cloud Reporting Infrastructure")
@@ -254,24 +224,24 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Composite Curves", "📉 Grand Com
 
 with tab1:
     st.subheader("Temperature - Enthalpy Cumulative Diagrams (T-H Curves)")
-    hot_temps = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=True)
+    hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=True)
     hot_H = [0.0]
-    for i in range(len(hot_temps)-1):
-        Th, Tl = hot_temps[i], hot_temps[i+1]
+    for i in range(len(hot_intervals)-1):
+        Th, Tl = hot_intervals[i], hot_intervals[i+1]
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Hot" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         hot_H.append(hot_H[-1] + cp_sum * (Th - Tl))
         
-    cold_temps = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + [s["Tout"] for s in streams.values() if s["type"]=="Cold"])))
+    cold_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + [s["Tout"] for s in streams.values() if s["type"]=="Cold"])), reverse=True)
     cold_H = [qc_min]
-    for i in range(len(cold_temps)-1):
-        Tl, Th = cold_temps[i], cold_temps[i+1]
+    for i in range(len(cold_intervals)-1):
+        Th, Tl = cold_intervals[i], cold_intervals[i+1]
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Cold" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         cold_H.append(cold_H[-1] + cp_sum * (Th - Tl))
         
     fig_cc, ax_cc = plt.subplots(figsize=(10, 4))
-    ax_cc.plot(hot_H, hot_temps, color="red", label="Hot Composite Curve", lw=2.5)
-    ax_cc.plot(cold_H, [t + dT_min for t in cold_temps], color="blue", label="Cold Composite Curve (Shifted)", lw=2.5)
-    ax_cc.set_xlabel("Enthalpy Cumulative / Heat Load (kW)")
+    ax_cc.plot(hot_H, hot_intervals, color="red", label="Hot Composite Curve", lw=2.5)
+    ax_cc.plot(cold_H, cold_intervals, color="blue", label="Cold Composite Curve", lw=2.5)
+    ax_cc.set_xlabel("Enthalpy Cumulative (kW)")
     ax_cc.set_ylabel("Temperature (°C)")
     ax_cc.legend()
     ax_cc.grid(True, linestyle=":")
@@ -282,7 +252,7 @@ with tab2:
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-    ax_gcc.plot([0, qh_min], [intervals, intervals], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
+    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
     ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
@@ -292,37 +262,29 @@ with tab2:
     st.pyplot(fig_gcc)
 
 with tab3:
-    st.subheader("Heat Exchanger Network (HEN) Corrected PDM Layout")
+    st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
     fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
     y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    # 1. Plot base horizontal process stream lines (Red = Hot, Blue = Cold)
     for name, s in streams.items():
         y = y_pos[name]
-        is_hot = s["type"] == "Hot"
-        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if is_hot else "blue", lw=3.5)
-        ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if is_hot else 'left', weight="bold")
+        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
+        ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
         
         ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-        ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if not is_hot else "dodgerblue", weight="bold")
+        ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
+        
+        if s["type"] == "Cold":
+            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
+        else:
+            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-    # 2. Plot process-to-process energy recovery matches generated from the queue
-    for h_name, c_name, mid_x, idx in matches_to_plot:
+    for i in range(hx_process_count):
+        h_name, c_name = hot_st[i], cold_st[i]
         y_h, y_c = y_pos[h_name], y_pos[c_name]
+        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
         ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
         ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
-        ax_grid.text(mid_x + 3, (y_h + y_c)/2, f"HX {idx}", color="green", weight="bold", fontsize=9)
-
-    # 3. Plot targeted auxiliary units ONLY on streams that failed to achieve full load recovery
-    for name, idx in heaters_to_plot:
-        y = y_pos[name]
-        ax_grid.plot(streams[name]["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-        ax_grid.text(streams[name]["Tout"], y + 0.15, f"HU {idx}", color="darkred", weight="bold", fontsize=9, ha="center")
-
-    for name, idx in coolers_to_plot:
-        y = y_pos[name]
-        ax_grid.plot(streams[name]["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
-        ax_grid.text(streams[name]["Tout"], y + 0.15, f"CU {idx}", color="dodgerblue", weight="bold", fontsize=9, ha="center")
 
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
