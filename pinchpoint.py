@@ -78,19 +78,15 @@ for i in range(len(intervals) - 1):
     dh = (cp_hot - cp_cold) * dT
     dh_intervals.append(dh)
 
-# --- ΑΛΓΟΡΙΘΜΟΣ CASCADE ---
-# Η ροή θερμότητας μεταφέρεται από τα πάνω διαστήματα προς τα κάτω
+# Cascade Algorithm
 cascade = [0]
 for dh in dh_intervals:
-    cascade.append(cascade[-1] + dh) #  Σωστή πρόσθεση του πλεονάσματος/ελλείμματος
+    cascade.append(cascade[-1] - dh)
 
-# Αν το min_cascade είναι αρνητικό, σημαίνει ότι χρειαζόμαστε εξωτερική θέρμανση (Qh_min)
 min_cascade = min(cascade)
 qh_min = -min_cascade if min_cascade < 0 else 0
-
-# Υπολογισμός της ελάχιστης ψύξης (Qc_min) που φεύγει από το κάτω μέρος
-qc_min = cascade[-1] + qh_min
-
+feasible_cascade = [c + qh_min for c in cascade]
+qc_min = feasible_cascade[-1]
 
 # Εύρεση Pinch
 try:
