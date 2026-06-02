@@ -256,11 +256,11 @@ with tab3:
         ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
         
         if s["type"] == "Cold":
-            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", music_marker=None, markersize=12, zorder=5)
+            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred", weight="bold")
         else:
-            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", music_marker=None, markersize=12, zorder=5)
+            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="dodgerblue", weight="bold")
 
@@ -273,7 +273,6 @@ with tab3:
         h_name, c_name = hot_st[i], cold_st[i]
         h_s, c_s = streams[h_name], streams[c_name]
         
-        # Calculate thermodynamics feasibility crossover coordinate
         match_temp = (max(h_s["Tout"], c_s["Tin"]) + min(h_s["Tin"], c_s["Tout"])) / 2
         if min(h_s["Tin"], h_s["Tout"]) <= match_temp <= max(h_s["Tin"], h_s["Tout"]):
             hx_idx += 1
@@ -285,12 +284,12 @@ with tab3:
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
     
-    # Standard consolidated unified legend architecture at base
+    # Standard consolidated unified legend architecture at base (FIXED SYNTAX)
     from matplotlib.lines import Line2D
     custom_legend = [
-        Line2D(,, marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
-        Line2D(,, marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
-        Line2D(,, marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
+        Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
     ]
     ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.25), ncol=3, fontsize=9)
     
