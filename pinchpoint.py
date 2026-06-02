@@ -316,14 +316,14 @@ with tab4:
 with tab5:
     st.subheader("💰 Isolated 5-Year Financial Asset Horizons")
     col_g1, col_g2 = st.columns(2)
-    years_range = list(range(0, 6)) # Rigorously bounded 5-year timeline matrix (0 to 5)
+    years_range = list(range(0, 6)) # 5-year timeline matrix (0 to 5)
     
-    # Financial tracking vectors formulation based on clean accumulation laws
+    # Financial tracking vectors formulation
     base_capex_vector = [capex_base] * len(years_range)
-    base_opex_vector = [op_cost_before * y for y in years_range] # OPEX accumulates yearly starting from 0
+    base_opex_vector = [op_cost_before * y for y in years_range]
     
     int_capex_vector = [capex_integrated] * len(years_range)
-    int_opex_vector = [op_cost_after * y for y in years_range] # OPEX accumulates yearly starting from 0
+    int_opex_vector = [op_cost_after * y for y in years_range]
     
     with col_g1:
         st.markdown("**1. Unintegrated Base Plant Cost Profile (5-Year)**")
@@ -334,9 +334,6 @@ with tab5:
         })
         df_base_financials.set_index("Operating Year", inplace=True)
         st.line_chart(df_base_financials, color=["#777777", "#FF0000"])
-
-total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
-total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
         st.caption("CAPEX is constant (flat line). OPEX scales up linearly from Year 0 representing cumulative energy bills.")
         
     with col_g2:
