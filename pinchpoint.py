@@ -37,13 +37,15 @@ def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
     pdf.ln(10)
     pdf.set_font("Helvetica", "", 12)
     
-    # Αντικατάσταση του συμβόλου € με 'EUR' για την αποφυγή του Unicode Error
     for key, val in econ_summary.items():
         clean_val = str(val).replace("€", "EUR ")
         pdf.cell(40, 10, f"{key}: {clean_val}")
         pdf.ln(10)
         
-    return pdf.output()
+    # Μετατροπή της εξόδου σε καθαρά bytes (bytes object) για το Streamlit
+    pdf_bytes = bytes(pdf.output())
+    return pdf_bytes
+
 
 # --- SIDEBAR CONFIGURATION & ECONOMIC INPUTS ---
 st.sidebar.header("⚙️ Model Configuration")
