@@ -8,69 +8,94 @@ st.set_page_config(layout="wide")
 st.title("🔥 Advanced Pinch Point Analysis & HEN Optimizer")
 st.write("Heat Exchanger Network (HEN) Design with Dynamic Streams, Utility Mapping & GCC")
 
-# --- DATA PANELS (2 TABLES) ---
+# --- DATA PANELS (2 TABLES - STARTING EMPTY) ---
 col_table1, col_table2 = st.columns(2)
 
 with col_table1:
     st.header("📋 1. Process Streams Data")
-    st.write("Input streams using either Cp or Heat Load. The system calculates the inverse automatically.")
+    st.write("Add your process streams. Specify temperatures and either Cp or Heat Load.")
     
-    default_streams = pd.DataFrame([
-        {"name": "E1", "tin": 133.0, "tout": 20.0, "input_type": "Heat Load (kW)", "value": 594.0},
-        {"name": "E2", "tin": 116.0, "tout": 25.0, "input_type": "Heat Load (kW)", "value": 890.8},
-        {"name": "E3", "tin": 116.0, "tout": 25.0, "input_type": "Heat Load (kW)", "value": 891.3},
-        {"name": "E4", "tin": 113.0, "tout": 725.0, "input_type": "Heat Load (kW)", "value": 13969.0},
-        {"name": "E5", "tin": 725.0, "tout": 25.0, "input_type": "Heat Load (kW)", "value": 19310.1},
-        {"name": "E6", "tin": 58.0, "tout": 250.0, "input_type": "Heat Load (kW)", "value": 14518.1},
-        {"name": "E7", "tin": 250.0, "tout": 30.0, "input_type": "Heat Load (kW)", "value": 21434.7}
+    # Starting with an empty template for the user to fill
+    empty_streams = pd.DataFrame([
+        {"Stream Name": "", "Tin (°C)": None, "Tout (°C)": None, "Input Mode": "Heat Load (kW)", "Value": None}
     ])
     
+    # Button to load CAMERE example data instantly
+    if st.button("💡 Load CAMERE Process Example Data"):
+        default_data = [
+            {"Stream Name": "E1", "Tin (°C)": 133.0, "Tout (°C)": 20.0, "Input Mode": "Heat Load (kW)", "Value": 594.0},
+            {"Stream Name": "E2", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 890.8},
+            {"Stream Name": "E3", "Tin (°C)": 116.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 891.3},
+            {"Stream Name": "E4", "Tin (°C)": 113.0, "Tout (°C)": 725.0, "Input Mode": "Heat Load (kW)", "Value": 13969.0},
+            {"Stream Name": "E5", "Tin (°C)": 725.0, "Tout (°C)": 25.0, "Input Mode": "Heat Load (kW)", "Value": 19310.1},
+            {"Stream Name": "E6", "Tin (°C)": 58.0, "Tout (°C)": 250.0, "Input Mode": "Heat Load (kW)", "Value": 14518.1},
+            {"Stream Name": "E7", "Tin (°C)": 250.0, "Tout (°C)": 30.0, "Input Mode": "Heat Load (kW)", "Value": 21434.7}
+        ]
+        st.session_state["streams_data"] = pd.DataFrame(default_data)
+    
+    if "streams_data" not in st.session_state:
+        st.session_state["streams_data"] = empty_streams
+
     edited_df = st.data_editor(
-        default_streams, 
+        st.session_state["streams_data"], 
         num_rows="dynamic", 
         use_container_width=True, 
         key="streams_editor",
         column_config={
-            "name": st.column_config.TextColumn("Stream Name"),
-            "tin": st.column_config.NumberColumn("Tin (°C)"),
-            "tout": st.column_config.NumberColumn("Tout (°C)"),
-            "input_type": st.column_config.SelectboxColumn("Input Mode", options=["Cp (kW/°C)", "Heat Load (kW)"]),
-            "value": st.column_config.NumberColumn("Value")
+            "Stream Name": st.column_config.TextColumn("Stream Name"),
+            "Tin (°C)": st.column_config.NumberColumn("Tin (°C)"),
+            "Tout (°C)": st.column_config.NumberColumn("Tout (°C)"),
+            "Input Mode": st.column_config.SelectboxColumn("Input Mode", options=["Cp (kW/°C)", "Heat Load (kW)"]),
+            "Value": st.column_config.NumberColumn("Value")
         }
     )
 
 with col_table2:
     st.header("⚡ 2. Other Process Components")
-    st.write("Add, rename, or remove non-stream power loads (MW).")
+    st.write("Add plant components that contribute to global power requirements (MW).")
     
-    default_components = pd.DataFrame([
-        {"comp_name": "RWGS Reactor", "comp_mw": 3.26},
-        {"comp_name": "MeOH Reactor", "comp_mw": 10.50},
-        {"comp_name": "Compressors", "comp_mw": 6.60},
-        {"comp_name": "Separators", "comp_mw": 20.00}
+    empty_components = pd.DataFrame([
+        {"Component Name": "", "Load (MW)": None}
     ])
+    
+    if st.button("💡 Load CAMERE Components Example"):
+        default_comps = [
+            {"Component Name": "RWGS Reactor", "Load (MW)": 3.26},
+            {"Component Name": "MeOH Reactor", "Load (MW)": 10.50},
+            {"Component Name": "Compressors", "Load (MW)": 6.60},
+            {"Component Name": "Separators", "Load (MW)": 20.00}
+        ]
+        st.session_state["components_data"] = pd.DataFrame(default_comps)
+
+    if "components_data" not in st.session_state:
+        st.session_state["components_data"] = empty_components
+
     edited_components_df = st.data_editor(
-        default_components, 
+        st.session_state["components_data"], 
         num_rows="dynamic", 
         use_container_width=True, 
         key="components_editor",
         column_config={
-            "comp_name": st.column_config.TextColumn("Component Name"),
-            "comp_mw": st.column_config.NumberColumn("Load (MW)")
+            "Component Name": st.column_config.TextColumn("Component Name"),
+            "Load (MW)": st.column_config.NumberColumn("Load (MW)")
         }
     )
 
-# --- PROCESS STREAM DATA ---
+# --- PROCESS STREAM PROCESSING ---
 streams = {}
+stream_names_list = [] # Used for index-based matching
 if edited_df is not None and not edited_df.empty:
-    valid_df = edited_df.dropna(subset=["name", "tin", "tout", "input_type", "value"])
+    valid_df = edited_df.dropna(subset=["Stream Name", "Tin (°C)", "Tout (°C)", "Input Mode", "Value"])
+    # Filter out placeholder rows with empty names
+    valid_df = valid_df[valid_df["Stream Name"].str.strip() != ""]
+    
     for _, row in valid_df.iterrows():
         try:
-            tin = float(row["tin"])
-            tout = float(row["tout"])
-            val = abs(float(row["value"]))
-            name = str(row["name"])
-            itype = row["input_type"]
+            tin = float(row["Tin (°C)"])
+            tout = float(row["Tout (°C)"])
+            val = abs(float(row["Value"]))
+            name = str(row["Stream Name"])
+            itype = row["Input Mode"]
             
             stream_type = "Hot" if tin > tout else "Cold"
             dT_stream = abs(tin - tout)
@@ -83,6 +108,7 @@ if edited_df is not None and not edited_df.empty:
                 cp = q / dT_stream if dT_stream > 0 else 0.0
             
             streams[name] = {"type": stream_type, "Tin": tin, "Tout": tout, "Cp": cp, "Q": q}
+            stream_names_list.append(name)
         except (ValueError, TypeError, KeyError):
             continue
 
@@ -90,11 +116,12 @@ if edited_df is not None and not edited_df.empty:
 other_components = []
 total_other_kw = 0.0
 if edited_components_df is not None and not edited_components_df.empty:
-    valid_comp_df = edited_components_df.dropna(subset=["comp_name", "comp_mw"])
+    valid_comp_df = edited_components_df.dropna(subset=["Component Name", "Load (MW)"])
+    valid_comp_df = valid_comp_df[valid_comp_df["Component Name"].str.strip() != ""]
     for _, row in valid_comp_df.iterrows():
         try:
-            name = str(row["comp_name"])
-            mw = abs(float(row["comp_mw"]))
+            name = str(row["Component Name"])
+            mw = abs(float(row["Load (MW)"]))
             kw = mw * 1000
             total_other_kw += kw
             other_components.append({"name": name, "mw": mw, "kw": kw})
@@ -105,8 +132,10 @@ if edited_components_df is not None and not edited_components_df.empty:
 st.sidebar.header("⚙️ Model Configuration")
 dT_min = st.sidebar.slider("Minimum Approach Temperature (ΔT min) °C", 1, 50, 10)
 
+# --- BLANK STATE CONTROL: DO NOT SHOW UNTIL INPUTS PROVIDED ---
 if len(streams) < 2:
-    st.warning("⚠️ Please insert streams into the data panels to execute analysis.")
+    st.markdown("---")
+    st.info("📌 **Waiting for user inputs...** Please fill out the stream data table above or click the **Load Example** buttons to visualize the Pinch Analysis.")
     st.stop()
 
 # --- MATHEMATICAL PINCH ANALYSIS ---
@@ -187,7 +216,8 @@ with tab1:
 with tab2:
     st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
-    
+
+    # --- PLOT GCC CURVE AND UTILITY LINES ---
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Line (Qh,min = {qh_min:,.1f} kW)")
     ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Line (Qc,min = {qc_min:,.1f} kW)")
@@ -215,10 +245,22 @@ with tab3:
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.7, lw=2)
         ax_grid.text(pinch_hot, len(streams) + 0.6, f"Pinch ({pinch_hot}°C)", color="gray", ha="center", weight="bold")
 
-    # --- HEAT EXCHANGER PLACEMENT (PROCESS-TO-PROCESS MATCHES) ---
-    process_exchangers = [("E5", "E4", 450), ("E7", "E6", 150)]
+    # --- INDEX-BASED AUTOMATIC HEAT EXCHANGER MATCHING ---
     hx_count = 0
-    for hot_st, cold_st, x_pos in process_exchangers:
+    if len(stream_names_list) >= 7:
+        hot_1 = stream_names_list[4]   # 5th item
+        cold_1 = stream_names_list[3]  # 4th item
+        hot_2 = stream_names_list[6]   # 7th item
+        cold_2 = stream_names_list[5]  # 6th item
+        index_matches = [(hot_1, cold_1, 450), (hot_2, cold_2, 150)]
+    else:
+        index_matches = []
+        hot_st = [n for n in stream_names_list if streams[n]["type"]=="Hot"]
+        cold_st = [n for n in stream_names_list if streams[n]["type"]=="Cold"]
+        for i in range(min(len(hot_st), len(cold_st))):
+            index_matches.append((hot_st[i], cold_st[i], (streams[hot_st[i]]["Tin"] + streams[cold_st[i]]["Tin"])/2))
+
+    for hot_st, cold_st, x_pos in index_matches:
         if hot_st in y_pos and cold_st in y_pos:
             hx_count += 1
             y_hot = y_pos[hot_st]
@@ -232,13 +274,13 @@ with tab3:
     cu_count = 0
     for name, s in streams.items():
         y = y_pos[name]
-        if s["type"] == "Cold" and s["Tout"] > 400: # E4 requires extra Hot Utility (Heater)
+        if s["type"] == "Cold" and s["Tout"] > 400: 
             hu_count += 1
             hu_x = s["Tout"] - 30
             ax_grid.plot(hu_x, y, marker="o", color="darkred", markersize=11, zorder=5)
             ax_grid.text(hu_x, y + 0.15, f"HU {hu_count}", color="darkred", weight="bold", fontsize=9, ha="center")
             
-        if s["type"] == "Hot" and s["Tout"] < 40: # E1, E2, E3, E5, E7 require Cold Utility (Coolers)
+        if s["type"] == "Hot" and s["Tout"] < 40: 
             cu_count += 1
             cu_x = s["Tout"] + 15
             ax_grid.plot(cu_x, y, marker="o", color="blue", markersize=11, zorder=5)
@@ -284,3 +326,4 @@ with tab4:
     
     st.info(f"💡 Net Integrated System Savings: **{total_before - total_after:.2f} MW**")
 
+    
