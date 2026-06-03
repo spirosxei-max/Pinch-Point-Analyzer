@@ -361,14 +361,43 @@ with tab2:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
                     
-        # 🎯 ΕΞΥΠΝΗ ΣΧΕΔΙΑΣΗ UTILITIES: Σχεδιάζονται ΜΟΝΟ αν έχει περισσέψει φορτίο
+        # ----------------------------------------------------
+        # 🎯 4. ΓΕΝΙΚΗ ΣΧΕΔΙΑΣΗ UTILITIES (ΧΩΡΙΣ ΠΕΡΙΟΡΙΣΜΟΥΣ ΖΩΝΗΣ)
+        # ----------------------------------------------------
+        allocated_hot_utility = 0.0
+        allocated_cold_utility = 0.0
+
         for name, s in streams.items():
             y = y_pos[name]
-            if residual_Q[name] > 0.1:  # Αν έχει απομείνει ανικανοποίητο φορτίο
+            
+            # Αν έχει απομείνει ανικανοποίητο φορτίο στο ρεύμα, βάζουμε utility
+            # ανεξάρτητα από το αν βρίσκεται πάνω ή κάτω από το pinch
+            if residual_Q[name] > 0.1: 
+                
+                # Α. ΨΥΧΡΑ ΡΕΥΜΑΤΑ: Χρειάζονται Heater (Κόκκινος κύκλος στην έξοδο Tout)
                 if s["type"] == "Cold":
+                    q_heater = residual_Q[name]
+                    allocated_hot_utility += q_heater
+                    
                     ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-                else:
+                    ax_grid.text(s["Tout"], y + 0.25, f"H: {q_heater:,.0f} kW", fontsize=8, color="darkred", ha="center", weight="bold")
+                
+                # Β. ΘΕΡΜΑ ΡΕΥΜΑΤΑ: Χρειάζονται Cooler (Μπλε κύκλος στην έξοδο Tout)
+                elif s["type"] == "Hot":
+                    q_cooler = residual_Q[name]
+                    allocated_cold_utility += q_cooler
+                    
                     ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
+                    ax_grid.text(s["Tout"], y + 0.25, f"C: {q_cooler:,.0f} kW", fontsize=8, color="dodgerblue", ha="center", weight="bold")
+
+        # Υπολογισμός της επιπλέον ενέργειας που καταναλώνεται λόγω μη-βέλτιστης ολοκλήρωσης
+        penalty_hot = max(0.0, allocated_hot_utility - qh_min)
+        penalty_cold = max(0.0, allocated_cold_utility - qc_min)
+        
+        if penalty_hot > 1.0:
+            st.sidebar.info(f"ℹ️ Ενεργειακή Ποινή: Το δίκτυο καταναλώνει {penalty_hot:,.0f} kW επιπλέον θέρμανση "
+                            f"από το target του καταρράκτη ({qh_min:,.0f} kW).")
+
 
         # 4. Σχεδίαση της διακεκομμένης γραμμής Pinch
         if isinstance(pinch_hot, float):
