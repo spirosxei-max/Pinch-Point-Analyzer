@@ -260,8 +260,12 @@ with tab2:
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
-    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
+       # 🎯 Βελτιωμένη οπτική απεικόνιση των Utilities στις άκρες της GCC
+    # Σχεδιάζει τη θερμή παροχή ακριβώς στην κορυφή (πρώτο interval)
+    ax_gcc.plot([0, feasible_cascade[0]], [intervals[0], intervals[0]], color="red", lw=3, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
+    # Σχεδιάζει την ψυχρή παροχή ακριβώς στη βάση (τελευταίο interval)
+    ax_gcc.plot([0, feasible_cascade[-1]], [intervals[-1], intervals[-1]], color="dodgerblue", lw=3, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
+
     
     ax_gcc.set_xlabel("ΔΗ (kW)")
     ax_gcc.set_ylabel("Shifted Temperature T* (°C)")
