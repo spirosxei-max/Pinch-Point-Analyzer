@@ -260,7 +260,7 @@ with tab2:
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-       # 🎯 Βελτιωμένη οπτική απεικόνιση των Utilities στις άκρες της GCC
+    # 🎯 Βελτιωμένη οπτική απεικόνιση των Utilities στις άκρες της GCC
     # Σχεδιάζει τη θερμή παροχή ακριβώς στην κορυφή (πρώτο interval)
     ax_gcc.plot([0, feasible_cascade[0]], [intervals[0], intervals[0]], color="red", lw=3, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
     # Σχεδιάζει την ψυχρή παροχή ακριβώς στη βάση (τελευταίο interval)
@@ -314,15 +314,28 @@ with tab2:
                     # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
                     if streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
                         
-                        q_match = min(residual_Q[h_name], residual_Q[c_name])
-                        if q_match > 0:
-                            residual_Q[h_name] -= q_match
-                            residual_Q[c_name] -= q_match
-                            
-                            # Κατακόρυφη σχεδίαση στο κέντρο της ζώνης επικάλυψης
-                            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                            break
+                # 🎯 ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΜΕΣΑ ΣΤΑ LOOPS ΤΩΝ ΕΝΑΛΛΑΚΤΩΝ (ABOVE & BELOW PINCH):
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                    
+                    # Υπολογισμός του μέγιστου θερμοδυναμικά επιτρεπόμενου φορτίου (Driving Force Cap)
+                    # για να μην τέμνονται οι θερμοκρασίες λειτουργίας του εναλλάκτη
+                    if s["type"] == "Cold":
+                        max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
+                    else:
+                        max_q_thermo = streams[h_name]["Cp"] * (streams[h_name]["Tin"] - (streams[c_name]["Tin"] + dT_min))
+                    
+                    # Το πραγματικό φορτίο του εναλλάκτη είναι το ελάχιστο των τριών περιορισμών
+                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+                    
+                    if q_match > 1.0: # Μόνο αν μεταφέρεται ουσιαστική ενέργεια
+                        residual_Q[h_name] -= q_match
+                        residual_Q[c_name] -= q_match
+                        
+                        # Σχεδίαση καθαρής κάθετης γραμμής
+                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                        break
+
 
         # ----------------------------------------------------
         # ❄️ ΚΑΤΩ ΑΠΟ ΤΟ PINCH (BELOW PINCH)
@@ -347,14 +360,28 @@ with tab2:
                     # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
                     if streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
                         
-                        q_match = min(residual_Q[h_name], residual_Q[c_name])
-                        if q_match > 0:
-                            residual_Q[h_name] -= q_match
-                            residual_Q[c_name] -= q_match
-                            
-                            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                            break
+                # 🎯 ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΜΕΣΑ ΣΤΑ LOOPS ΤΩΝ ΕΝΑΛΛΑΚΤΩΝ (ABOVE & BELOW PINCH):
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                    
+                    # Υπολογισμός του μέγιστου θερμοδυναμικά επιτρεπόμενου φορτίου (Driving Force Cap)
+                    # για να μην τέμνονται οι θερμοκρασίες λειτουργίας του εναλλάκτη
+                    if s["type"] == "Cold":
+                        max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
+                    else:
+                        max_q_thermo = streams[h_name]["Cp"] * (streams[h_name]["Tin"] - (streams[c_name]["Tin"] + dT_min))
+                    
+                    # Το πραγματικό φορτίο του εναλλάκτη είναι το ελάχιστο των τριών περιορισμών
+                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+                    
+                    if q_match > 1.0: # Μόνο αν μεταφέρεται ουσιαστική ενέργεια
+                        residual_Q[h_name] -= q_match
+                        residual_Q[c_name] -= q_match
+                        
+                        # Σχεδίαση καθαρής κάθετης γραμμής
+                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                        break
+
 
         # 3. ΣΧΕΔΙΑΣΗ ΤΩΝ ΤΕΛΙΚΩΝ ΕΓΚΥΡΩΝ ΕΝΑΛΛΑΚΤΩΝ
         for y_h, y_c, mid_x in valid_matches:
