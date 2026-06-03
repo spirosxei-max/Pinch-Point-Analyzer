@@ -292,63 +292,80 @@ with tab2:
             else:
                 ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-                       # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
+                               # === ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6 SIMULTANEOUS) ===
         residual_Q = {name: s["Q"] for name, s in streams.items()}
         valid_matches = []
 
-        # 🔥 Πάνω από το Pinch (Above Pinch) - Κανόνας 2: Bottom-Up
+        # ----------------------------------------------------
+        # 🔥 ΠΑΝΩ ΑΠΟ ΤΟ PINCH (ABOVE PINCH)
+        # ----------------------------------------------------
+        # Κανόνας 1 & 2: Ξεκινάμε από το Pinch και πάμε προς τα πάνω (Bottom-Up)
         above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
         above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
         
-        matched_cold_above = set() # Παρακολούθηση για αποφυγή πολλαπλών συνδέσεων
+        # Ταξινόμηση από το Pinch προς τα πάνω (Αύξουσα θερμοκρασία)
+        above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
+        above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
+        
         for h_name in above_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in above_cold:
-                if c_name in matched_cold_above or residual_Q[c_name] <= 0: continue
+                if residual_Q[c_name] <= 0: continue
                 
-                # Έλεγχος μεγάλου εύρους overlap (για το S4-S5)
-                overlap_high = min(streams[h_name]["Tin"], streams[c_name]["Tout"])
-                overlap_low = max(streams[h_name]["Tout"], streams[c_name]["Tin"])
-                
-                if (overlap_high - overlap_low) >= 50.0:
-                    q_match = min(residual_Q[h_name], residual_Q[c_name])
-                    if q_match > 0:
-                        residual_Q[h_name] -= q_match
-                        residual_Q[c_name] -= q_match
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                        matched_cold_above.add(c_name) # Κλειδώνει το ψυχρό ρεύμα
-                        break # Προχωράει αμέσως στο επόμενο θερμό ρεύμα
+                # Κανόνας 3: Έλεγχος Driving Force στην είσοδο
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                    
+                    # Κανόνας 5: Αυστηρό Κριτήριο CP κοντά στο Pinch (Cp_hot <= Cp_cold)
+                    # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
+                    if streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
+                        
+                        q_match = min(residual_Q[h_name], residual_Q[c_name])
+                        if q_match > 0:
+                            residual_Q[h_name] -= q_match
+                            residual_Q[c_name] -= q_match
+                            
+                            # Κατακόρυφη σχεδίαση στο κέντρο της ζώνης επικάλυψης
+                            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+                            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                            break
 
-        # ❄️ Κάτω από το Pinch (Below Pinch) - Κανόνας 2: Top-to-Bottom
+        # ----------------------------------------------------
+        # ❄️ ΚΑΤΩ ΑΠΟ ΤΟ PINCH (BELOW PINCH)
+        # ----------------------------------------------------
+        # Κανόνας 1 & 2: Ξεκινάμε από το Pinch και πάμε προς τα κάτω (Top-to-Bottom)
         below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
         below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
         
-        matched_cold_below = set() # Παρακολούθηση για αποφυγή πολλαπλών συνδέσεων
+        # Ταξινόμηση από το Pinch προς τα κάτω (Φθίνουσα θερμοκρασία)
+        below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
+        below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
+        
         for h_name in below_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in below_cold:
-                if c_name in matched_cold_below or residual_Q[c_name] <= 0: continue
+                if residual_Q[c_name] <= 0: continue
                 
-                # Έλεγχος μεγάλου εύρους overlap (για το S6-S7)
-                overlap_high = min(streams[h_name]["Tin"], streams[c_name]["Tout"])
-                overlap_low = max(streams[h_name]["Tout"], streams[c_name]["Tin"])
-                
-                if (overlap_high - overlap_low) >= 50.0:
-                    q_match = min(residual_Q[h_name], residual_Q[c_name])
-                    if q_match > 0:
-                        residual_Q[h_name] -= q_match
-                        residual_Q[c_name] -= q_match
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                        matched_cold_below.add(c_name) # Κλειδώνει το ψυχρό ρεύμα
-                        break # Προχωράει αμέσως στο επόμενο θερμό ρεύμα
+                # Κανόνας 3: Έλεγχος Driving Force στην είσοδο
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                    
+                    # Κανόνας 5: Αυστηρό Κριτήριο CP κοντά στο Pinch (Cp_hot >= Cp_cold)
+                    # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
+                    if streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
+                        
+                        q_match = min(residual_Q[h_name], residual_Q[c_name])
+                        if q_match > 0:
+                            residual_Q[h_name] -= q_match
+                            residual_Q[c_name] -= q_match
+                            
+                            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+                            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                            break
 
-
-        # 3. Σχεδίαση των τελικών, έγκυρων εναλλακτών (Καθαρές κάθετες γραμμές)
+        # 3. ΣΧΕΔΙΑΣΗ ΤΩΝ ΤΕΛΙΚΩΝ ΕΓΚΥΡΩΝ ΕΝΑΛΛΑΚΤΩΝ
         for y_h, y_c, mid_x in valid_matches:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
+
 
         # 4. Σχεδίαση της διακεκομμένης γραμμής Pinch
         if isinstance(pinch_hot, float):
