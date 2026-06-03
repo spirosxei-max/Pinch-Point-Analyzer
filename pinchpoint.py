@@ -314,14 +314,15 @@ with tab3:
                                 "overlap": overlap, "q": q_possible
                             })
 
-        # ❄️ Υποψήφιοι Κάτω από το Pinch (Hot-to-Cold)
+        # ❄️ Υποψήφιοι Κάτω από το Pinch (Hot-to-Cold) - ΔΙΟΡΘΩΜΕΝΟ ΟΡΙΟ
         for h_name in below_hot:
             for c_name in below_below if 'below_below' in locals() else below_cold:
                 h, c = streams[h_name], streams[c_name]
                 if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] >= c["Cp"]:
                     overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
                     if overlap > 0:
-                        max_q_thermo = c["Cp"] * (h["Tin"] - dT_min - c["Tin"])
+                        # Ορθή εξίσωση driving force για την περιοχή κάτω από το pinch
+                        max_q_thermo = h["Cp"] * (h["Tin"] - (c["Tin"] + dT_min))
                         q_possible = min(h["Q"], c["Q"], max_q_thermo)
                         if q_possible > 1.0:
                             candidate_matches.append({
@@ -329,8 +330,7 @@ with tab3:
                                 "overlap": overlap, "q": q_possible
                             })
 
-        # 🎯 ΤΑΞΙΝΟΜΗΣΗ ΒΑΣΕΙ ΘΕΡΜΟΔΥΝΑΜΙΚΗΣ ΣΥΓΓΕΝΕΙΑΣ (Load & Overlap)
-        # Βάζει αυτόματα στην κορυφή τα μεγάλα ρεύματα με τα ίδια thermal spans
+        # 🎯 ΤΑΞΙΝΟΜΗΣΗ ΒΑΣΕΙ ΘΕΡΜΟΔΥΝΑΜΙΚΗΣ ΣΥΓΓΕΝΕΙΑΣ
         candidate_matches.sort(key=lambda x: (x["q"], x["overlap"]), reverse=True)
 
         # 3. ΕΦΑΡΜΟΓΗ GREEDY TICK-OFF ALLOCATION
@@ -352,8 +352,12 @@ with tab3:
             else:
                 if h_name in matched_hot_below or c_name in matched_cold_below: continue
 
-            # Υπολογισμός τελικού q_match με βάση το Driving Force Limit
-            max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
+            # Δυναμικός υπολογισμός του ορίου με βάση τη ζώνη (Above ή Below)
+            if zone == "above":
+                max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
+            else:
+                max_q_thermo = streams[h_name]["Cp"] * (streams[h_name]["Tin"] - (streams[c_name]["Tin"] + dT_min))
+                
             q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
 
             if q_match > 1.0:
@@ -375,37 +379,25 @@ with tab3:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
+        # 🎯 ΔΙΟΡΘΩΣΗ ΔΙΠΛΗΣ ΜΕΤΡΗΣΗΣ
+        hx_process_count = len(valid_matches)
+
         # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΔΙΑΣΤΑΥΡΩΣΗ ΜΕ ΚΑΤΑΡΡΑΚΤΗ (ΜΕ ΑΝΟΧΗ)
         for name, s in streams.items():
             y = y_pos[name]
-            
-            # Υπολογίζουμε την πραγματική θερμοκρασία που κατάφερε να φτάσει το ρεύμα 
             q_exchanged = s["Q"] - residual_Q[name]
             dT_achieved = q_exchanged / s["Cp"] if s["Cp"] > 0 else 0
             
             if s["type"] == "Cold":
                 current_T_out = s["Tin"] + dT_achieved
-                
-                # Προσθέτουμε ανοχή 0.1°C για να αποφύγουμε τα σφάλματα στρογγυλοποίησης
                 if current_T_out < (s["Tout"] - 0.1):
-                    # Σχεδίαση Heater (Κόκκινος κύκλος) στην τελική έξοδο Tout
                     ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-                    
-                    # Αναγραφή του πραγματικού φορτίου που απέμεινε βάσει καταρράκτη
-                    q_utility = residual_Q[name]
-                    ax_grid.text(s["Tout"], y + 0.25, f"H: {q_utility:,.0f} kW", fontsize=8, color="darkred", ha="center", weight="bold")
-            
+                    ax_grid.text(s["Tout"], y + 0.25, f"H: {residual_Q[name]:,.0f} kW", fontsize=8, color="darkred", ha="center", weight="bold")
             elif s["type"] == "Hot":
                 current_T_out = s["Tin"] - dT_achieved
-                
-                # Προσθέτουμε ανοχή 0.1°C για να αποφύγουμε τα σφάλματα στρογγυλοποίησης
                 if current_T_out > (s["Tout"] + 0.1):
-                    # Σχεδίαση Cooler (Μπλε κύκλος) στην τελική έξοδο Tout
                     ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
-                    
-                    q_utility = residual_Q[name]
-                    ax_grid.text(s["Tout"], y + 0.25, f"C: {q_utility:,.0f} kW", fontsize=8, color="dodgerblue", ha="center", weight="bold")
-
+                    ax_grid.text(s["Tout"], y + 0.25, f"C: {residual_Q[name]:,.0f} kW", fontsize=8, color="dodgerblue", ha="center", weight="bold")
 
         # 6. Σχεδίαση της διακεκομμένης γραμμής Pinch
         if isinstance(pinch_hot, float):
