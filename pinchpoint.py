@@ -291,33 +291,24 @@ with tab3:
         else:
             ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-        # 2. ΕΞΥΠΝΟΣ ΑΛΓΟΡΙΘΜΟΣ ΣΥΝΔΕΣΗΣ ΕΝΑΛΛΑΚΤΩΝ (MATCHING LOGIC)
-    # Αντί για τυχαία σύνδεση, ταιριάζουμε ρεύματα που είναι θερμοδυναμικά εφικτά
-    placed_exchangers = 0
-    
-    for h_name in hot_st:
-        for c_name in cold_st:
-            # Έλεγχος αν υπάρχει επικάλυψη θερμοκρασιών με επαρκές Driving Force (ΔT_min)
-            # Το θερμό ρεύμα πρέπει να είναι πιο ζεστό από την είσοδο του ψυχρού
-            if streams[h_name]["Tin"] > streams[c_name]["Tin"] + dT_min:
-                
-                y_h = y_pos[h_name]
-                y_c = y_pos[c_name]
-                
-                # Υπολογισμός των πραγματικών σημείων τοποθέτησης στο διάγραμμα
-                # Τοποθετούμε τον εναλλάκτη κοντά στην περιοχή μέγιστης ανάκτησης
-                x_hot_match = streams[h_name]["Tin"] - dT_min
-                x_cold_match = streams[c_name]["Tin"]
-                
-                # Σχεδίαση της κάθετης πράσινης γραμμής σύνδεσης μεταξύ των δύο ρευμάτων
-                ax_grid.plot([x_hot_match, x_cold_match], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
-                
-                # Τοποθέτηση των κύκλων στις ακριβείς θερμοκρασίες του κάθε ρεύματος
-                ax_grid.plot(x_hot_match, y_h, marker="o", color="green", markersize=10, zorder=4)
-                ax_grid.plot(x_cold_match, y_c, marker="o", color="green", markersize=10, zorder=4)
-                
-                placed_exchangers += 1
-                break # Σταματάμε στο πρώτο έγκυρο match για αυτό το θερμό ρεύμα
+       #  ΑΥΤΟ ΕΙΝΑΙ ΤΟ ΝΕΟ ΚΟΜΜΑΤΙ ΠΟΥ ΒΑΖΕΙΣ ΣΤΗ ΘΕΣΗ ΤΟΥ:
+for h_name in hot_st:
+    for c_name in cold_st:
+        # Θερμοδυναμικός έλεγχος: Το θερμό ρεύμα πρέπει να είναι 
+        # θερμότερο από το ψυχρό κατά τουλάχιστον dT_min στην είσοδό του.
+        if streams[h_name]["Tin"] > streams[c_name]["Tin"] + dT_min:
+            y_h = y_pos[h_name]
+            y_c = y_pos[c_name]
+            
+            # Κρατάμε την απόλυτα κάθετη καθαρή γραμμή που σου αρέσει
+            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+            
+            ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
+            ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
+            
+            # Μόλις βρει το πρώτο έγκυρο match για αυτό το θερμό ρεύμα, 
+            # προχωράει στο επόμενο για να αποφευχθούν οι διπλοί εναλλάκτες
+            break 
 
 
     if isinstance(pinch_hot, float):
