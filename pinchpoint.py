@@ -274,31 +274,31 @@ with tab2:
     st.pyplot(fig_gcc)
 
 with tab3:
-    st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
+        st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
         
-    # Δημιουργία ΜΙΑΣ και μόνο φιγούρας Matplotlib για να μην εμφανίζονται διπλά γραφήματα
-    fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
-    y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
+        # Δημιουργία ΜΙΑΣ και μόνο φιγούρας Matplotlib για να μην εμφανίζονται διπλά γραφήματα
+        fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
+        y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
         
-    # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων (Βασική δομή)
-    for name, s in streams.items():
-        y = y_pos[name]
-        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
-        ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
-        ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-        ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
+        # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων (Βασική δομή)
+        for name, s in streams.items():
+            y = y_pos[name]
+            ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
+            ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
 
-    # 2. ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN (TICK-OFF & OUTLET TEMPERATURES FIRST)
-    residual_Q = {name: s["Q"] for name, s in streams.items()}
-    valid_matches = []
-    
-    # 🔥 Α. ΠΑΝΩ ΑΠΟ ΤΟ PINCH: Ταιριάζουμε τα ΨΥΧΡΑ προς τα ΘΕΡΜΑ (Cold-to-Hot)
-    above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
-    above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
+        # 2. ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN (TICK-OFF & OUTLET TEMPERATURES FIRST)
+        residual_Q = {name: s["Q"] for name, s in streams.items()}
+        valid_matches = []
+
+        # 🔥 Α. ΠΑΝΩ ΑΠΟ ΤΟ PINCH: Ταιριάζουμε τα ΨΥΧΡΑ προς τα ΘΕΡΜΑ (Cold-to-Hot)
+        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
+        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
         
-    # Ταξινόμηση από το Pinch και πάνω (Bottom-Up)
-    above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
-    above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
+        # Ταξινόμηση από το Pinch και πάνω (Bottom-Up)
+        above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
+        above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
         
         for c_name in above_cold:
             if residual_Q[c_name] <= 0: continue
@@ -320,9 +320,9 @@ with tab3:
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
                         break # Το ψυχρό βρήκε το ταίρι του, πάμε στο επόμενο
 
-    # ❄️ Β. ΚΑΤΩ ΑΠΟ ΤΟ PINCH: Ταιριάζουμε τα ΘΕΡΜΑ προς τα ΨΥΧΡΑ (Hot-to-Cold)
-    below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
-    below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
+        # ❄️ Β. ΚΑΤΩ ΑΠΟ ΤΟ PINCH: Ταιριάζουμε τα ΘΕΡΜΑ προς τα ΨΥΧΡΑ (Hot-to-Cold)
+        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
+        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
         
         # Ταξινόμηση από το Pinch και κάτω (Top-to-Bottom)
         below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
@@ -387,6 +387,9 @@ with tab3:
         
         # Σχεδίαση της μίας τελικής φιγούρας στο Streamlit
         st.pyplot(fig_grid)
+
+
+
 
 
 
