@@ -375,36 +375,31 @@ with tab3:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
-                # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΔΙΑΣΤΑΥΡΩΣΗ ΜΕ ΚΑΤΑΡΡΑΚΤΗ (PINCH)
+        # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΔΙΑΣΤΑΥΡΩΣΗ ΜΕ ΚΑΤΑΡΡΑΚΤΗ (ΜΕ ΑΝΟΧΗ)
         for name, s in streams.items():
             y = y_pos[name]
             
             # Υπολογίζουμε την πραγματική θερμοκρασία που κατάφερε να φτάσει το ρεύμα 
-            # μετά τους process-to-process εναλλάκτες
             q_exchanged = s["Q"] - residual_Q[name]
             dT_achieved = q_exchanged / s["Cp"] if s["Cp"] > 0 else 0
             
             if s["type"] == "Cold":
-                # Η τρέχουσα θερμοκρασία του ψυχρού ρεύματος μετά την ανάκτηση
                 current_T_out = s["Tin"] + dT_achieved
                 
-                # ΚΡΙΤΗΡΙΟ 1: Έχει πιάσει την επιθυμητή θερμοκρασία στόχου;
-                # ΚΡΙΤΗΡΙΟ 2: Βρίσκεται στην περιοχή που ο καταρράκτης επιβάλλει Heater (πάνω από το Pinch ή λόγω ΔT);
-                if current_T_out < s["Tout"]:
+                # Προσθέτουμε ανοχή 0.1°C για να αποφύγουμε τα σφάλματα στρογγυλοποίησης
+                if current_T_out < (s["Tout"] - 0.1):
                     # Σχεδίαση Heater (Κόκκινος κύκλος) στην τελική έξοδο Tout
                     ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
                     
-                    # Αναγράφουμε το ακριβές φορτίο που ζητάει ο καταρράκτης για αυτό το διάστημα
+                    # Αναγραφή του πραγματικού φορτίου που απέμεινε βάσει καταρράκτη
                     q_utility = residual_Q[name]
                     ax_grid.text(s["Tout"], y + 0.25, f"H: {q_utility:,.0f} kW", fontsize=8, color="darkred", ha="center", weight="bold")
             
             elif s["type"] == "Hot":
-                # Η τρέχουσα θερμοκρασία του θερμού ρεύματος μετά την ανάκτηση
                 current_T_out = s["Tin"] - dT_achieved
                 
-                # ΚΡΙΤΗΡΙΟ 1: Έχει ψυχθεί όσο χρειαζόταν;
-                # ΚΡΙΤΗΡΙΟ 2: Βρίσκεται στην περιοχή που ο καταρράκτης επιβάλλει Cooler (κάτω από το Pinch);
-                if current_T_out > s["Tout"]:
+                # Προσθέτουμε ανοχή 0.1°C για να αποφύγουμε τα σφάλματα στρογγυλοποίησης
+                if current_T_out > (s["Tout"] + 0.1):
                     # Σχεδίαση Cooler (Μπλε κύκλος) στην τελική έξοδο Tout
                     ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
                     
