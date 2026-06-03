@@ -292,7 +292,7 @@ with tab2:
             else:
                 ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-               # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
+                       # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
         residual_Q = {name: s["Q"] for name, s in streams.items()}
         valid_matches = []
 
@@ -300,43 +300,50 @@ with tab2:
         above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
         above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
         
+        matched_cold_above = set() # Παρακολούθηση για αποφυγή πολλαπλών συνδέσεων
         for h_name in above_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in above_cold:
-                if residual_Q[c_name] <= 0: continue
+                if c_name in matched_cold_above or residual_Q[c_name] <= 0: continue
                 
-                # 🎯 ΑΥΣΤΗΡΟ ΦΙΛΤΡΟ: Επιτρέπεται ΜΟΝΟ αν υπάρχει ουσιαστικό overlap (S4-S5)
+                # Έλεγχος μεγάλου εύρους overlap (για το S4-S5)
                 overlap_high = min(streams[h_name]["Tin"], streams[c_name]["Tout"])
                 overlap_low = max(streams[h_name]["Tout"], streams[c_name]["Tin"])
                 
-                if (overlap_high - overlap_low) >= 50.0:  # Ελάχιστο εύρος 50°C για κύρια ανάκτηση
+                if (overlap_high - overlap_low) >= 50.0:
                     q_match = min(residual_Q[h_name], residual_Q[c_name])
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
                         mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                        matched_cold_above.add(c_name) # Κλειδώνει το ψυχρό ρεύμα
+                        break # Προχωράει αμέσως στο επόμενο θερμό ρεύμα
 
         # ❄️ Κάτω από το Pinch (Below Pinch) - Κανόνας 2: Top-to-Bottom
         below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
         below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
         
+        matched_cold_below = set() # Παρακολούθηση για αποφυγή πολλαπλών συνδέσεων
         for h_name in below_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in below_cold:
-                if residual_Q[c_name] <= 0: continue
+                if c_name in matched_cold_below or residual_Q[c_name] <= 0: continue
                 
-                # 🎯 ΑΥΣΤΗΡΟ ΦΙΛΤΡΟ: Επιτρέπεται ΜΟΝΟ αν υπάρχει ουσιαστικό overlap (S6-S7)
+                # Έλεγχος μεγάλου εύρους overlap (για το S6-S7)
                 overlap_high = min(streams[h_name]["Tin"], streams[c_name]["Tout"])
                 overlap_low = max(streams[h_name]["Tout"], streams[c_name]["Tin"])
                 
-                if (overlap_high - overlap_low) >= 50.0:  # Ελάχιστο εύρος 50°C για κύρια ανάκτηση
+                if (overlap_high - overlap_low) >= 50.0:
                     q_match = min(residual_Q[h_name], residual_Q[c_name])
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
                         mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                        matched_cold_below.add(c_name) # Κλειδώνει το ψυχρό ρεύμα
+                        break # Προχωράει αμέσως στο επόμενο θερμό ρεύμα
+
 
         # 3. Σχεδίαση των τελικών, έγκυρων εναλλακτών (Καθαρές κάθετες γραμμές)
         for y_h, y_c, mid_x in valid_matches:
