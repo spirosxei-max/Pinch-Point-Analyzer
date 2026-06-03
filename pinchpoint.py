@@ -292,33 +292,24 @@ with tab2:
             else:
                 ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-        # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
+               # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
         residual_Q = {name: s["Q"] for name, s in streams.items()}
-        current_T = {name: s["Tin"] for name, s in streams.items()}
         valid_matches = []
 
         # 🔥 Πάνω από το Pinch (Above Pinch) - Κανόνας 2: Bottom-Up
         above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
         above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
         
-        above_hot = sorted(above_hot, key=lambda n: streams[n]["Cp"])
-        above_cold = sorted(above_cold, key=lambda n: streams[n]["Cp"], reverse=True)
-        
         for h_name in above_hot:
-            if residual_Q[h_name] <= 0: 
-                continue
+            if residual_Q[h_name] <= 0: continue
             for c_name in above_cold:
-                if residual_Q[c_name] <= 0: 
-                    continue
+                if residual_Q[c_name] <= 0: continue
                 
-                # Κανόνας 3: Έλεγχος διαθέσιμου Driving Force στην είσοδο (Μερική Ανάκτηση)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-                    cp_h = streams[h_name]["Cp"]
-                    cp_c = streams[c_name]["Cp"]
-                    
-                    if cp_h > cp_c:  # Κανόνας 5
-                        cp_h = cp_c * 0.95
-                        
+                # 🎯 ΑΥΣΤΗΡΟ ΦΙΛΤΡΟ: Επιτρέπεται ΜΟΝΟ αν υπάρχει ουσιαστικό overlap (S4-S5)
+                overlap_high = min(streams[h_name]["Tin"], streams[c_name]["Tout"])
+                overlap_low = max(streams[h_name]["Tout"], streams[c_name]["Tin"])
+                
+                if (overlap_high - overlap_low) >= 50.0:  # Ελάχιστο εύρος 50°C για κύρια ανάκτηση
                     q_match = min(residual_Q[h_name], residual_Q[c_name])
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
@@ -330,24 +321,16 @@ with tab2:
         below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
         below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
         
-        below_hot = sorted(below_hot, key=lambda n: streams[n]["Cp"])
-        below_cold = sorted(below_cold, key=lambda n: streams[n]["Cp"], reverse=True)
-        
         for h_name in below_hot:
-            if residual_Q[h_name] <= 0: 
-                continue
+            if residual_Q[h_name] <= 0: continue
             for c_name in below_cold:
-                if residual_Q[c_name] <= 0: 
-                    continue
+                if residual_Q[c_name] <= 0: continue
                 
-                # Κανόνας 3: Έλεγχος διαθέσιμου Driving Force στην είσοδο (Μερική Ανάκτηση)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-                    cp_h = streams[h_name]["Cp"]
-                    cp_c = streams[c_name]["Cp"]
-                    
-                    if cp_h < cp_c:  # Κανόνας 5
-                        cp_c = cp_h * 0.95
-                        
+                # 🎯 ΑΥΣΤΗΡΟ ΦΙΛΤΡΟ: Επιτρέπεται ΜΟΝΟ αν υπάρχει ουσιαστικό overlap (S6-S7)
+                overlap_high = min(streams[h_name]["Tin"], streams[c_name]["Tout"])
+                overlap_low = max(streams[h_name]["Tout"], streams[c_name]["Tin"])
+                
+                if (overlap_high - overlap_low) >= 50.0:  # Ελάχιστο εύρος 50°C για κύρια ανάκτηση
                     q_match = min(residual_Q[h_name], residual_Q[c_name])
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
