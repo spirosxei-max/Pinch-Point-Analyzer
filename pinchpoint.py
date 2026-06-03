@@ -273,88 +273,119 @@ with tab2:
     ax_gcc.legend()
     st.pyplot(fig_gcc)
 
-    with tab3:
-        st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
-        fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
-        y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
+with tab3:
+    st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
+    fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
+    y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
         
-        # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων
-        for name, s in streams.items():
-            y = y_pos[name]
-            ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
-            ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+    # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων
+    for name, s in streams.items():
+    y = y_pos[name]
+    ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
+    ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
             
-            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
+    ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+    ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
                         
-        # === ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6 SIMULTANEOUS) ===
-        residual_Q = {name: s["Q"] for name, s in streams.items()}
-        valid_matches = []
+    # === ΑΛΓΟΡΙΘΜΟΣ ΒΕΛΤΙΣΤΟΠΟΙΗΣΗΣ HEN (GREEDY OVERLAP & LOAD MATCHING) ===
+    residual_Q = {name: s["Q"] for name, s in streams.items()}
+    valid_matches = []
+    candidate_matches = []
 
-        # ----------------------------------------------------
-        # 🔥 ΠΑΝΩ ΑΠΟ ΤΟ PINCH (ABOVE PINCH)
-        # ----------------------------------------------------
-        # Κανόνας 1 & 2: Ξεκινάμε από το Pinch και πάμε προς τα πάνω (Bottom-Up)
-        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
-        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
-        
-        # Ταξινόμηση από το Pinch προς τα πάνω (Αύξουσα θερμοκρασία)
-        above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
-        above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
-        
-        for h_name in above_hot:
-            if residual_Q[h_name] <= 0: continue
-            for c_name in above_cold:
-                if residual_Q[c_name] <= 0: continue
-                
-                # Κανόνας 3: Έλεγχος Driving Force στην είσοδο
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-                    
-                    # Κανόνας 5: Αυστηρό Κριτήριο CP κοντά στο Pinch (Cp_hot <= Cp_cold)
-                    # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
-                    if streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
-                        
-                        q_match = min(residual_Q[h_name], residual_Q[c_name])
-                        if q_match > 0:
-                            residual_Q[h_name] -= q_match
-                            residual_Q[c_name] -= q_match
-                            
-                            # Κατακόρυφη σχεδίαση στο κέντρο της ζώνης επικάλυψης
-                            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                            break
+    # 1. ΔΙΑΧΩΡΙΣΜΟΣ ΡΕΥΜΑΤΩΝ ΣΕ ΖΩΝΕΣ (ABOVE & BELOW PINCH)
+    above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
+    above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
+    below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
+    below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
 
-        # ----------------------------------------------------
-        # ❄️ ΚΑΤΩ ΑΠΟ ΤΟ PINCH (BELOW PINCH)
-        # ----------------------------------------------------
-        # Κανόνας 1 & 2: Ξεκινάμε από το Pinch και πάμε προς τα κάτω (Top-to-Bottom)
-        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
-        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
-        
-        # Ταξινόμηση από το Pinch προς τα κάτω (Φθίνουσα θερμοκρασία)
-        below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
-        below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
-        
-        for h_name in below_hot:
-            if residual_Q[h_name] <= 0: continue
-            for c_name in below_cold:
-                if residual_Q[c_name] <= 0: continue
-                
-                # Κανόνας 3: Έλεγχος Driving Force στην είσοδο
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+    # ----------------------------------------------------
+    # 🔥 ΔΗΜΟΥΡΓΙΑ ΥΠΟΨΗΦΙΩΝ ΓΙΑ ΤΗΝ ΠΕΡΙΟΧΗ ABOVE PINCH
+    # ----------------------------------------------------
+    for h_name in above_hot:
+        for c_name in above_cold:
+            h = streams[h_name]
+            c = streams[c_name]
+            
+            # Έλεγχος Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot <= Cp_cold)
+            if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] <= c["Cp"]:
+                overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
+                if overlap > 0:
+                    max_q_thermo = c["Cp"] * (h["Tin"] - dT_min - c["Tin"])
+                    q_possible = min(h["Q"], c["Q"], max_q_thermo)
                     
-                    # Κανόνας 5: Αυστηρό Κριτήριο CP κοντά στο Pinch (Cp_hot >= Cp_cold)
-                    # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
-                    if streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
-                        
-                        q_match = min(residual_Q[h_name], residual_Q[c_name])
-                        if q_match > 0:
-                            residual_Q[h_name] -= q_match
-                            residual_Q[c_name] -= q_match
-                            
-                            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                            break
+                    if q_possible > 1.0:
+                        candidate_matches.append({
+                            "zone": "above", "hot": h_name, "cold": c_name,
+                            "overlap": overlap, "q": q_possible, "cp_h": h["Cp"]
+                        })
+
+    # ----------------------------------------------------
+    # ❄️ ΔΗΜΟΥΡΓΙΑ ΥΠΟΨΗΦΙΩΝ ΓΙΑ ΤΗΝ ΠΕΡΙΟΧΗ BELOW PINCH
+    # ----------------------------------------------------
+    for h_name in below_hot:
+        for c_name in below_cold:
+            h = streams[h_name]
+            c = streams[c_name]
+            
+            # Έλεγχος Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot >= Cp_cold)
+            if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] >= c["Cp"]:
+                overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
+                if overlap > 0:
+                    max_q_thermo = c["Cp"] * (h["Tin"] - dT_min - c["Tin"])
+                    q_possible = min(h["Q"], c["Q"], max_q_thermo)
+                    
+                    if q_possible > 1.0:
+                        candidate_matches.append({
+                            "zone": "below", "hot": h_name, "cold": c_name,
+                            "overlap": overlap, "q": q_possible, "cp_h": h["Cp"]
+                        })
+
+    # 2. ΣΤΑΤΙΣΤΙΚΗ ΤΑΞΙΝΟΜΗΣΗ (SORTING) ΒΑΣΕΙ ΦΟΡΤΙΟΥ ΚΑΙ ΘΕΡΜΙΚΟΥ ΕΥΡΟΥΣ
+    # Ταξινομούμε με βάση το μέγιστο φορτίο (q) και δευτερευόντως το overlap
+    candidate_matches.sort(key=lambda x: (x["q"], x["overlap"]), reverse=True)
+
+    # 3. GREEDY ALLOCATION (ΚΑΤΑΝΟΜΗ ΦΟΡΤΙΩΝ)
+    # Διασφαλίζουμε ότι κάθε ρεύμα θα κάνει το βέλτιστο match και επιτρέπουμε continue
+    matched_hot_above = set()
+    matched_cold_above = set()
+    matched_hot_below = set()
+    matched_cold_below = set()
+
+    for match in candidate_matches:
+        h_name = match["hot"]
+        c_name = match["cold"]
+        zone = match["zone"]
+        
+        # Έλεγχος αν τα ρεύματα έχουν ακόμα υπολειπόμενη ανάγκη
+        if residual_Q[h_name] <= 1.0 or residual_Q[c_name] <= 1.0:
+            continue
+            
+        # Κλείδωμα για αποφυγή ανεξέλεγκτων πολλαπλών διασταυρώσεων ανά ζώνη
+        if zone == "above":
+            if h_name in matched_hot_above or c_name in matched_cold_above: continue
+        else:
+            if h_name in matched_hot_below or c_name in matched_cold_below: continue
+
+        # Επανυπολογισμός του πραγματικού q με βάση το τι απέμεινε (residual)
+        h = streams[h_name]
+        max_q_thermo = h["Cp"] * (h["Tin"] - dT_min - streams[c_name]["Tin"]) if zone == "above" else streams[c_name]["Cp"] * (h["Tin"] - dT_min - streams[c_name]["Tin"])
+        q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+
+        if q_match > 1.0:
+            residual_Q[h_name] -= q_match
+            residual_Q[c_name] -= q_match
+            
+            # Καθαρή κάθετη σχεδίαση στο κέντρο της πραγματικής τους περιοχής
+            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+            valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+            
+            # Καταγραφή των ρευμάτων που ικανοποιήθηκαν κύρια
+            if zone == "above":
+                matched_hot_above.add(h_name)
+                matched_cold_above.add(c_name)
+            else:
+                matched_hot_below.add(h_name)
+                matched_cold_below.add(c_name)
 
         # 3. ΣΧΕΔΙΑΣΗ ΤΩΝ ΤΕΛΙΚΩΝ ΕΓΚΥΡΩΝ ΕΝΑΛΛΑΚΤΩΝ
         for y_h, y_c, mid_x in valid_matches:
