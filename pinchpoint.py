@@ -280,7 +280,7 @@ with tab3:
         fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
         y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
         
-        # Σχεδίαση των οριζόντιων γραμμών των ρευμάτων (Βασικό Grid)
+        # Σχεδίαση των οριζόντιων γραμμών των ρευμάτων
         for name, s in streams.items():
             y = y_pos[name]
             ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
@@ -288,63 +288,69 @@ with tab3:
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
 
-        # 2. ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (GLOBAL CANDIDATE SELECTION)
+        # 2. ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (GLOBAL CANDIDATE SELECTION)
         residual_Q = {name: s["Q"] for name, s in streams.items()}
         valid_matches = []
         candidate_matches = []
 
-        # Ασφαλής έλεγχος αν υπάρχει Pinch
-        has_pinch = isinstance(pinch_hot, (int, float)) and pinch_hot != "N/A"
+        # Διαχωρισμός ρευμάτων ανά ζώνη Pinch (Βάσει των 725°C και 705°C)
+        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
+        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
+        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
+        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
 
-        # Δημιουργία υποψηφίων συνδέσεων βάσει των κανόνων σας (mCp και Driving Force)
-        for h_name in hot_st:
-            for c_name in cold_st:
+        # 🔥 Υποψήφιοι Πάνω από το Pinch (Cold-to-Hot)
+        for c_name in above_cold:
+            for h_name in above_hot:
                 h, c = streams[h_name], streams[c_name]
-                
-                # Βασικός έλεγχος Driving Force στην είσοδο
-                if h["Tin"] >= c["Tin"] + dT_min:
+                if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] <= c["Cp"]:
                     overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
-                    
                     if overlap > 0:
-                        # Αν υπάρχει Pinch, απομονώνουμε τις συνδέσεις Above/Below
-                        if has_pinch:
-                            # 1. Above Pinch: mCp_hot <= mCp_cold (Cold-to-Hot)
-                            if h["Tin"] >= pinch_hot and c["Tout"] >= pinch_cold:
-                                if h["Cp"] <= c["Cp"]:
-                                    q_possible = min(h["Q"], c["Q"])
-                                    candidate_matches.append({
-                                        "zone": "above", "hot": h_name, "cold": c_name, "overlap": overlap, "q": q_possible
-                                    })
-                            # 2. Below Pinch: mCp_hot >= mCp_cold (Hot-to-Cold)
-                            if h["Tout"] <= pinch_hot and c["Tin"] <= pinch_cold:
-                                if h["Cp"] >= c["Cp"]:
-                                    q_possible = min(h["Q"], c["Q"])
-                                    candidate_matches.append({
-                                        "zone": "below", "hot": h_name, "cold": c_name, "overlap": overlap, "q": q_possible
-                                    })
-                        else:
-                            # Αν δεν υπάρχει Pinch, Greedy ανάκτηση φορτίου
-                            q_possible = min(h["Q"], c["Q"])
+                        # Καθαρή ανάκτηση φορτίου βάσει του Tick-Off Rule
+                        q_possible = min(h["Q"], c["Q"])
+                        if q_possible > 1.0:
                             candidate_matches.append({
-                                "zone": "global", "hot": h_name, "cold": c_name, "overlap": overlap, "q": q_possible
+                                "zone": "above", "hot": h_name, "cold": c_name,
+                                "overlap": overlap, "q": q_possible
                             })
 
-        # ΤΑΞΙΝΟΜΗΣΗ ΥΠΟΨΗΦΙΩΝ ΒΑΣΕΙ ΦΟΡΤΙΟΥ ΚΑΙ ΘΕΡΜΙΚΗΣ ΣΥΓΓΕΝΕΙΑΣ
+        # ❄️ Υποψήφιοι Κάτω από το Pinch (Hot-to-Cold)
+        for h_name in below_hot:
+            for c_name in below_cold:
+                h, c = streams[h_name], streams[c_name]
+                if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] >= c["Cp"]:
+                    overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
+                    if overlap > 0:
+                        # Καθαρή ανάκτηση φορτίου βάσει του Tick-Off Rule
+                        q_possible = min(h["Q"], c["Q"])
+                        if q_possible > 1.0:
+                            candidate_matches.append({
+                                "zone": "below", "hot": h_name, "cold": c_name,
+                                "overlap": overlap, "q": q_possible
+                            })
+
+        # 🎯 ΤΑΞΙΝΟΜΗΣΗ ΒΑΣΕΙ ΘΕΡΜΟΔΥΝΑΜΙΚΗΣ ΣΥΓΓΕΝΕΙΑΣ (Load & Overlap)
+        # Αυτό βάζει αυτόματα στην κορυφή της προτεραιότητας τα S4-S5 και S6-S7
         candidate_matches.sort(key=lambda x: (x["q"], x["overlap"]), reverse=True)
 
-        # 3. ΕΦΑΡΜΟΓΗ ΚΑΤΑΝΟΜΗΣ ΦΟΡΤΙΩΝ (TICK-OFF ALLOCATION)
-        matched_hot = set()
-        matched_cold = set()
+        # 3. ΕΦΑΡΜΟΓΗ GREEDY TICK-OFF ALLOCATION (ΜΟΝΟ ΜΙΑ ΚΥΡΙΑ ΣΥΝΔΕΣΗ ΑΝΑ ΡΕΥΜΑ)
+        matched_hot_above = set()
+        matched_cold_above = set()
+        matched_hot_below = set()
+        matched_cold_below = set()
 
         for match in candidate_matches:
             h_name = match["hot"]
             c_name = match["cold"]
+            zone = match["zone"]
             
             if residual_Q[h_name] <= 1.0 or residual_Q[c_name] <= 1.0:
                 continue
                 
-            if h_name in matched_hot or c_name in matched_cold: 
-                continue
+            if zone == "above":
+                if h_name in matched_hot_above or c_name in matched_cold_above: continue
+            else:
+                if h_name in matched_hot_below or c_name in matched_cold_below: continue
 
             q_match = min(residual_Q[h_name], residual_Q[c_name])
 
@@ -355,31 +361,31 @@ with tab3:
                 mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                 valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
                 
-                matched_hot.add(h_name)
-                matched_cold.add(c_name)
+                if zone == "above":
+                    matched_hot_above.add(h_name)
+                    matched_cold_above.add(c_name)
+                else:
+                    matched_hot_below.add(h_name)
+                    matched_cold_below.add(c_name)
 
-        # 4. ΣΧΕΔΙΑΣΗ ΤΩΝ ΠΡΑΣΙΝΩΝ ΕΝΑΛΛΑΚΤΩΝ ΑΝΑΚΤΗΣΗΣ
+        # 4. ΣΧΕΔΙΑΣΗ ΤΩΝ ΠΡΑΣΙΝΩΝ ΕΝΑΛΛΑΚΤΩΝ
         for y_h, y_c, mid_x in valid_matches:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
         # 🎯 ΔΙΟΡΘΩΣΗ COUNT (7 VS 8): Υπολογισμός MER Targets ανά ζώνη Pinch
-        if has_pinch:
-            above_h_count = sum(1 for n in hot_st if streams[n]["Tin"] >= pinch_hot)
-            above_c_count = sum(1 for n in cold_st if streams[n]["Tout"] >= pinch_cold)
-            below_h_count = sum(1 for n in hot_st if streams[n]["Tout"] <= pinch_hot)
-            below_cold_count = sum(1 for n in cold_st if streams[n]["Tin"] <= pinch_cold)
-            
-            hot_util_above = sum(1 for n in cold_st if streams[n]["Tout"] >= pinch_cold and residual_Q[n] > 1.0)
-            cold_util_below = sum(1 for n in hot_st if streams[n]["Tout"] <= pinch_hot and residual_Q[n] > 1.0)
-            
-            N_above = (above_h_count + above_c_count + hot_util_above - 1) if (above_h_count or above_c_count) else 0
-            N_below = (below_h_count + below_cold_count + cold_util_below - 1) if (below_h_count or below_cold_count) else 0
-            hx_process_count = N_above + N_below
-        else:
-            hx_process_count = len(streams) + sum(1 for n in streams if residual_Q[n] > 1.0) - 1
+        hot_utilities_above = sum(1 for n in above_cold if residual_Q[n] > 1.0)
+        cold_utilities_above = sum(1 for n in above_hot if residual_Q[n] > 1.0)
+        hot_utilities_below = sum(1 for n in below_cold if residual_Q[n] > 1.0)
+        cold_utilities_below = sum(1 for n in below_hot if residual_Q[n] > 1.0)
+        
+        N_above = (len(above_hot) + len(above_cold) + hot_utilities_above + cold_utilities_above - 1) if (above_hot or above_cold) else 0
+        N_below = (len(below_hot) + len(below_cold) + hot_utilities_below + cold_utilities_below - 1) if (below_hot or below_cold) else 0
+        
+        # Αντικαθιστούμε το global count με τον ορθό τύπο MER
+        hx_process_count = N_above + N_below
 
-        # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΣΧΕΔΙΑΣΗ UTILITIES (ΜΕ ΑΝΟΧΗ 0.1°C)
+        # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΣΧΕΔΙΑΣΗ UTILITIES (ΜΕ ΑΝΟΧΗ)
         for name, s in streams.items():
             y = y_pos[name]
             q_exchanged = s["Q"] - residual_Q[name]
@@ -397,16 +403,16 @@ with tab3:
                     ax_grid.text(s["Tout"], y + 0.25, f"C: {residual_Q[name]:,.0f} kW", fontsize=8, color="dodgerblue", ha="center", weight="bold")
 
         # 6. Σχεδίαση της διακεκομμένης γραμμής Pinch
-        if has_pinch:
+        if isinstance(pinch_hot, float):
             ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
             ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
         
         # 7. Legend και μορφοποίηση άξονα
         from matplotlib.lines import Line2D
         custom_legend = [
-            Line2D(,, marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
-            Line2D(,, marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
-            Line2D(,, marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
+            Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
+            Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
+            Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
         ]
         ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
         
