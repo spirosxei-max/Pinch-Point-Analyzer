@@ -310,7 +310,7 @@ with tab2:
                 
                 # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
                 #  Αντικατάσταση της γραμμής ελέγχου "Κανόνας 3" και στις δύο ζώνες:
-if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
 
                     
                     cp_h = streams[h_name]["Cp"]
@@ -340,7 +340,7 @@ if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
                 
                 # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
                #  Αντικατάσταση της γραμμής ελέγχου "Κανόνας 3" και στις δύο ζώνες:
-if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
 
                     
                     cp_h = streams[h_name]["Cp"]
