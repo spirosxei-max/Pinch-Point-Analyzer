@@ -309,7 +309,9 @@ with tab2:
                 if residual_Q[c_name] <= 0: continue
                 
                 # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tout"] + dT_min and streams[h_name]["Tout"] >= streams[c_name]["Tin"] + dT_min:
+                #  Αντικατάσταση της γραμμής ελέγχου "Κανόνας 3" και στις δύο ζώνες:
+if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+
                     
                     cp_h = streams[h_name]["Cp"]
                     cp_c = streams[c_name]["Cp"]
@@ -337,7 +339,9 @@ with tab2:
                 if residual_Q[c_name] <= 0: continue
                 
                 # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tout"] + dT_min and streams[h_name]["Tout"] >= streams[c_name]["Tin"] + dT_min:
+               #  Αντικατάσταση της γραμμής ελέγχου "Κανόνας 3" και στις δύο ζώνες:
+if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+
                     
                     cp_h = streams[h_name]["Cp"]
                     cp_c = streams[c_name]["Cp"]
