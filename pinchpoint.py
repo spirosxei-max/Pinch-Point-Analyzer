@@ -302,7 +302,7 @@ with tab2:
         above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
         above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
         
-                for h_name in above_hot:
+            for h_name in above_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in above_cold:
                 if residual_Q[c_name] <= 0: continue
@@ -332,7 +332,7 @@ with tab2:
         below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
         below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
         
-                for h_name in below_hot:
+            for h_name in below_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in below_cold:
                 if residual_Q[c_name] <= 0: continue
