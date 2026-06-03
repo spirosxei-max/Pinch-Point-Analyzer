@@ -273,62 +273,116 @@ with tab2:
     ax_gcc.legend()
     st.pyplot(fig_gcc)
 
-with tab3:
-    st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
-    fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
-    y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
-    
-    for name, s in streams.items():
-        y = y_pos[name]
-        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
-        ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+    with tab3:
+        st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
+        fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
+        y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
         
-        ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-        ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
-        
-        if s["type"] == "Cold":
-            ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-        else:
-            ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
+        # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων
+        for name, s in streams.items():
+            y = y_pos[name]
+            ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
+            ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+            
+            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
+            
+            if s["type"] == "Cold":
+                ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
+            else:
+                ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-       #  ΑΥΤΟ ΕΙΝΑΙ ΤΟ ΝΕΟ ΚΟΜΜΑΤΙ ΠΟΥ ΒΑΖΕΙΣ ΣΤΗ ΘΕΣΗ ΤΟΥ:
-for h_name in hot_st:
-    for c_name in cold_st:
-        # Θερμοδυναμικός έλεγχος: Το θερμό ρεύμα πρέπει να είναι 
-        # θερμότερο από το ψυχρό κατά τουλάχιστον dT_min στην είσοδό του.
-        if streams[h_name]["Tin"] > streams[c_name]["Tin"] + dT_min:
-            y_h = y_pos[h_name]
-            y_c = y_pos[c_name]
-            
-            # Κρατάμε την απόλυτα κάθετη καθαρή γραμμή που σου αρέσει
-            mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-            
+        # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
+        residual_Q = {name: s["Q"] for name, s in streams.items()}
+        current_T = {name: s["Tin"] for name, s in streams.items()}
+        valid_matches = []
+
+        # 🔥 Πάνω από το Pinch (Above Pinch) - Κανόνας 2: Bottom-Up από το Pinch
+        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
+        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
+        
+        # Κανόνας 4: Ταξινόμηση - Μικρότερο Cp θερμό προς μεγαλύτερο Cp ψυχρό
+        above_hot = sorted(above_hot, key=lambda n: streams[n]["Cp"])
+        above_cold = sorted(above_cold, key=lambda n: streams[n]["Cp"], reverse=True)
+        
+        for h_name in above_hot:
+            if residual_Q[h_name] <= 0: continue
+            for c_name in above_cold:
+                if residual_Q[c_name] <= 0: continue
+                
+                cp_h = streams[h_name]["Cp"]
+                cp_c = streams[c_name]["Cp"]
+                
+                # Κανόνας 5: Έλεγχος Cp κοντά στο Pinch (Cp_hot <= Cp_cold) -> Εικονικό Split
+                if cp_h > cp_c:
+                    cp_h_effective = cp_c * 0.95
+                else:
+                    cp_h_effective = cp_h
+                    
+                # Κανόνας 3: Έλεγχος Driving Force
+                if current_T[h_name] > current_T[c_name] + dT_min:
+                    q_match = min(residual_Q[h_name], residual_Q[c_name])
+                    if q_match > 0:
+                        residual_Q[h_name] -= q_match
+                        residual_Q[c_name] -= q_match
+                        mid_x = (current_T[h_name] + current_T[c_name]) / 2
+                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+
+        # ❄️ Κάτω από το Pinch (Below Pinch) - Κανόνας 2: Top-to-Bottom από το Pinch
+        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
+        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
+        
+        below_hot = sorted(below_hot, key=lambda n: streams[n]["Cp"])
+        below_cold = sorted(below_cold, key=lambda n: streams[n]["Cp"], reverse=True)
+        
+        for h_name in below_hot:
+            if residual_Q[h_name] <= 0: continue
+            for c_name in below_cold:
+                if residual_Q[c_name] <= 0: continue
+                
+                cp_h = streams[h_name]["Cp"]
+                cp_c = streams[c_name]["Cp"]
+                
+                # Κανόνας 5: Έλεγχος Cp κοντά στο Pinch (Cp_hot >= Cp_cold) -> Εικονικό Split
+                if cp_h < cp_c:
+                    cp_c_effective = cp_h * 0.95
+                else:
+                    cp_c_effective = cp_c
+                    
+                if current_T[h_name] > current_T[c_name] + dT_min:
+                    q_match = min(residual_Q[h_name], residual_Q[c_name])
+                    if q_match > 0:
+                        residual_Q[h_name] -= q_match
+                        residual_Q[c_name] -= q_match
+                        mid_x = (current_T[h_name] + current_T[c_name]) / 2
+                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+
+        # 3. Σχεδίαση των τελικών, έγκυρων εναλλακτών (Καθαρές κάθετες γραμμές)
+        for y_h, y_c, mid_x in valid_matches:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
-            
-            # Μόλις βρει το πρώτο έγκυρο match για αυτό το θερμό ρεύμα, 
-            # προχωράει στο επόμενο για να αποφευχθούν οι διπλοί εναλλάκτες
-            break 
 
+        # 4. Σχεδίαση της διακεκομμένης γραμμής Pinch
+        if isinstance(pinch_hot, float):
+            ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
+            ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
+        
+        # 5. Legend και μορφοποίηση άξονα
+        from matplotlib.lines import Line2D
+        custom_legend = [
+            Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
+            Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
+            Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
+        ]
+        ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
+        
+        ax_grid.set_yticks(list(y_pos.values()))
+        ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
+        ax_grid.set_xlabel("Temperature Scale (°C)", weight="bold")
+        ax_grid.set_ylim(0.3, len(streams) + 0.6)
+        ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
+        st.pyplot(fig_grid)
 
-    if isinstance(pinch_hot, float):
-        ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
-        ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
-    
-    from matplotlib.lines import Line2D
-    custom_legend = [
-        Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
-    ]
-    ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
-    
-    ax_grid.set_yticks(list(y_pos.values()))
-    ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
-    ax_grid.set_xlabel("Temperature Scale (°C)", weight="bold")
-    ax_grid.set_ylim(0.3, len(streams) + 0.6)
-    ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
-    st.pyplot(fig_grid)
 
 with tab4:
     labels = ['Hot Utilities', 'Cold Utilities'] + [c["name"] for c in other_components]
