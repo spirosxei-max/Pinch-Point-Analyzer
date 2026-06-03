@@ -292,16 +292,14 @@ with tab2:
             else:
                 ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-        # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
+                # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
         residual_Q = {name: s["Q"] for name, s in streams.items()}
-        current_T = {name: s["Tin"] for name, s in streams.items()}
         valid_matches = []
 
-        # 🔥 Πάνω από το Pinch (Above Pinch) - Κανόνας 2: Bottom-Up από το Pinch
+        # 🔥 Πάνω από το Pinch (Above Pinch) - Κανόνας 2: Bottom-Up
         above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
         above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
         
-        # Κανόνας 4: Ταξινόμηση - Μικρότερο Cp θερμό προς μεγαλύτερο Cp ψυχρό
         above_hot = sorted(above_hot, key=lambda n: streams[n]["Cp"])
         above_cold = sorted(above_cold, key=lambda n: streams[n]["Cp"], reverse=True)
         
@@ -310,25 +308,23 @@ with tab2:
             for c_name in above_cold:
                 if residual_Q[c_name] <= 0: continue
                 
-                cp_h = streams[h_name]["Cp"]
-                cp_c = streams[c_name]["Cp"]
-                
-                # Κανόνας 5: Έλεγχος Cp κοντά στο Pinch (Cp_hot <= Cp_cold) -> Εικονικό Split
-                if cp_h > cp_c:
-                    cp_h_effective = cp_c * 0.95
-                else:
-                    cp_h_effective = cp_h
+                # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
+                if streams[h_name]["Tin"] >= streams[c_name]["Tout"] + dT_min and streams[h_name]["Tout"] >= streams[c_name]["Tin"] + dT_min:
                     
-                # Κανόνας 3: Έλεγχος Driving Force
-                if current_T[h_name] > current_T[c_name] + dT_min:
+                    cp_h = streams[h_name]["Cp"]
+                    cp_c = streams[c_name]["Cp"]
+                    
+                    if cp_h > cp_c:  # Κανόνας 5
+                        cp_h = cp_c * 0.95
+                        
                     q_match = min(residual_Q[h_name], residual_Q[c_name])
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
-                        mid_x = (current_T[h_name] + current_T[c_name]) / 2
+                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tout"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
 
-        # ❄️ Κάτω από το Pinch (Below Pinch) - Κανόνας 2: Top-to-Bottom από το Pinch
+        # ❄️ Κάτω από το Pinch (Below Pinch) - Κανόνας 2: Top-to-Bottom
         below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
         below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
         
@@ -340,21 +336,20 @@ with tab2:
             for c_name in below_cold:
                 if residual_Q[c_name] <= 0: continue
                 
-                cp_h = streams[h_name]["Cp"]
-                cp_c = streams[c_name]["Cp"]
-                
-                # Κανόνας 5: Έλεγχος Cp κοντά στο Pinch (Cp_hot >= Cp_cold) -> Εικονικό Split
-                if cp_h < cp_c:
-                    cp_c_effective = cp_h * 0.95
-                else:
-                    cp_c_effective = cp_c
+                # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
+                if streams[h_name]["Tin"] >= streams[c_name]["Tout"] + dT_min and streams[h_name]["Tout"] >= streams[c_name]["Tin"] + dT_min:
                     
-                if current_T[h_name] > current_T[c_name] + dT_min:
+                    cp_h = streams[h_name]["Cp"]
+                    cp_c = streams[c_name]["Cp"]
+                    
+                    if cp_h < cp_c:  # Κανόνας 5
+                        cp_c = cp_h * 0.95
+                        
                     q_match = min(residual_Q[h_name], residual_Q[c_name])
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
-                        mid_x = (current_T[h_name] + current_T[c_name]) / 2
+                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tout"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
 
         # 3. Σχεδίαση των τελικών, έγκυρων εναλλακτών (Καθαρές κάθετες γραμμές)
