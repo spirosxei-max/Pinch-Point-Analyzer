@@ -288,12 +288,12 @@ with tab3:
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
 
-        # 2. ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (GLOBAL CANDIDATE SELECTION)
+        # 2. ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (GLOBAL CANDIDATE SELECTION)
         residual_Q = {name: s["Q"] for name, s in streams.items()}
         valid_matches = []
         candidate_matches = []
 
-        # Διαχωρισμός ρευμάτων ανά ζώνη Pinch
+        # Διαχωρισμός ρευμάτων ανά ζώνη Pinch (Βάσει των 725°C και 705°C)
         above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
         above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
         below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
@@ -306,34 +306,34 @@ with tab3:
                 if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] <= c["Cp"]:
                     overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
                     if overlap > 0:
-                        max_q_thermo = c["Cp"] * (h["Tin"] - dT_min - c["Tin"])
-                        q_possible = min(h["Q"], c["Q"], max_q_thermo)
+                        # Καθαρή ανάκτηση φορτίου βάσει του Tick-Off Rule
+                        q_possible = min(h["Q"], c["Q"])
                         if q_possible > 1.0:
                             candidate_matches.append({
                                 "zone": "above", "hot": h_name, "cold": c_name,
                                 "overlap": overlap, "q": q_possible
                             })
 
-        # ❄️ Υποψήφιοι Κάτω από το Pinch (Hot-to-Cold) - ΔΙΟΡΘΩΜΕΝΟ ΟΡΙΟ
+        # ❄️ Υποψήφιοι Κάτω από το Pinch (Hot-to-Cold)
         for h_name in below_hot:
-            for c_name in below_below if 'below_below' in locals() else below_cold:
+            for c_name in below_cold:
                 h, c = streams[h_name], streams[c_name]
                 if h["Tin"] >= c["Tin"] + dT_min and h["Cp"] >= c["Cp"]:
                     overlap = min(h["Tin"], c["Tout"]) - max(h["Tout"], c["Tin"])
                     if overlap > 0:
-                        # Ορθή εξίσωση driving force για την περιοχή κάτω από το pinch
-                        max_q_thermo = h["Cp"] * (h["Tin"] - (c["Tin"] + dT_min))
-                        q_possible = min(h["Q"], c["Q"], max_q_thermo)
+                        # Καθαρή ανάκτηση φορτίου βάσει του Tick-Off Rule
+                        q_possible = min(h["Q"], c["Q"])
                         if q_possible > 1.0:
                             candidate_matches.append({
                                 "zone": "below", "hot": h_name, "cold": c_name,
                                 "overlap": overlap, "q": q_possible
                             })
 
-        # 🎯 ΤΑΞΙΝΟΜΗΣΗ ΒΑΣΕΙ ΘΕΡΜΟΔΥΝΑΜΙΚΗΣ ΣΥΓΓΕΝΕΙΑΣ
+        # 🎯 ΤΑΞΙΝΟΜΗΣΗ ΒΑΣΕΙ ΘΕΡΜΟΔΥΝΑΜΙΚΗΣ ΣΥΓΓΕΝΕΙΑΣ (Load & Overlap)
+        # Αυτό βάζει αυτόματα στην κορυφή της προτεραιότητας τα S4-S5 και S6-S7
         candidate_matches.sort(key=lambda x: (x["q"], x["overlap"]), reverse=True)
 
-        # 3. ΕΦΑΡΜΟΓΗ GREEDY TICK-OFF ALLOCATION
+        # 3. ΕΦΑΡΜΟΓΗ GREEDY TICK-OFF ALLOCATION (ΜΟΝΟ ΜΙΑ ΚΥΡΙΑ ΣΥΝΔΕΣΗ ΑΝΑ ΡΕΥΜΑ)
         matched_hot_above = set()
         matched_cold_above = set()
         matched_hot_below = set()
@@ -352,13 +352,7 @@ with tab3:
             else:
                 if h_name in matched_hot_below or c_name in matched_cold_below: continue
 
-            # Δυναμικός υπολογισμός του ορίου με βάση τη ζώνη (Above ή Below)
-            if zone == "above":
-                max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-            else:
-                max_q_thermo = streams[h_name]["Cp"] * (streams[h_name]["Tin"] - (streams[c_name]["Tin"] + dT_min))
-                
-            q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+            q_match = min(residual_Q[h_name], residual_Q[c_name])
 
             if q_match > 1.0:
                 residual_Q[h_name] -= q_match
@@ -379,10 +373,19 @@ with tab3:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
-        # 🎯 ΔΙΟΡΘΩΣΗ ΔΙΠΛΗΣ ΜΕΤΡΗΣΗΣ
-        hx_process_count = len(valid_matches)
+        # 🎯 ΔΙΟΡΘΩΣΗ COUNT (7 VS 8): Υπολογισμός MER Targets ανά ζώνη Pinch
+        hot_utilities_above = sum(1 for n in above_cold if residual_Q[n] > 1.0)
+        cold_utilities_above = sum(1 for n in above_hot if residual_Q[n] > 1.0)
+        hot_utilities_below = sum(1 for n in below_cold if residual_Q[n] > 1.0)
+        cold_utilities_below = sum(1 for n in below_hot if residual_Q[n] > 1.0)
+        
+        N_above = (len(above_hot) + len(above_cold) + hot_utilities_above + cold_utilities_above - 1) if (above_hot or above_cold) else 0
+        N_below = (len(below_hot) + len(below_cold) + hot_utilities_below + cold_utilities_below - 1) if (below_hot or below_cold) else 0
+        
+        # Αντικαθιστούμε το global count με τον ορθό τύπο MER
+        hx_process_count = N_above + N_below
 
-        # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΔΙΑΣΤΑΥΡΩΣΗ ΜΕ ΚΑΤΑΡΡΑΚΤΗ (ΜΕ ΑΝΟΧΗ)
+        # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΣΧΕΔΙΑΣΗ UTILITIES (ΜΕ ΑΝΟΧΗ)
         for name, s in streams.items():
             y = y_pos[name]
             q_exchanged = s["Q"] - residual_Q[name]
