@@ -7,7 +7,7 @@ from fpdf import FPDF
 
 st.set_page_config(layout="wide")
 
-st.title("🔥 Enterprise Pinch Point Analyzer & HEN Synthesizer")
+st.title("Pinch Point Analyzer & HEN Synthesizer")
 st.write("Industrial Heat Exchanger Network Design with Dynamic 5-Year Horizons & Clean Utility Layouts")
 
 # --- EXECUTIVE PDF REPORT GENERATION ---
@@ -37,22 +37,22 @@ def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
     return bytes(pdf.output())
 
 # --- SIDEBAR CONFIGURATION & ECONOMIC INPUTS ---
-st.sidebar.header("⚙️ Model Configuration")
-dT_min = st.sidebar.slider("Minimum Approach Temperature (ΔT min) °C", 1, 50, 10)
+st.sidebar.header("Model Configuration")
+dT_min = st.sidebar.slider("Minimum Approach Temperature (ΔT min) °C", 15, 50, 10)
 
 st.sidebar.header("💰 Economic Parameters")
 cost_heating = st.sidebar.number_input("Hot Utility Cost (€/kWh)", value=0.04, format="%.4f")
 cost_cooling = st.sidebar.number_input("Cold Utility Cost (€/kWh)", value=0.01, format="%.4f")
 op_hours = st.sidebar.number_input("Annual Operating Hours (hr/year)", value=8000)
 
-st.sidebar.subheader("🏗️ Capital Cost (HEN Installation)")
+st.sidebar.subheader("Capital Cost (HEN Installation)")
 fixed_hex_cost = st.sidebar.number_input("Fixed Cost per Exchanger (€)", value=10000)
 area_cost_coeff = st.sidebar.number_input("Area Cost Coefficient (€/m²)", value=400)
 estimated_area_base = st.sidebar.number_input("Base System Area needed (m²)", value=150)
 estimated_area_integrated = st.sidebar.number_input("Integrated System Area needed (m²)", value=250)
 
 # --- INITIALIZATION (PURE BLANK STATE - NO HARDCODED VALUES) ---
-st.header("📥 Data Initialization")
+st.header("Data Initialization")
 
 empty_streams = pd.DataFrame([
     {"Stream Name": "", "Tin (°C)": None, "Tout (°C)": None, "Input Mode": "Heat Load (kW)", "Value": None}
@@ -68,7 +68,7 @@ if uploaded_file is not None:
     try:
         st.session_state["streams_data"] = pd.read_excel(uploaded_file, sheet_name=0)
         st.session_state["components_data"] = pd.read_excel(uploaded_file, sheet_name=1)
-        st.success("🎉 Data successfully imported from Excel sheets!")
+        st.success("Data successfully imported from Excel sheets!")
     except Exception as e:
         st.error(f"Excel parsing failure. Check sheets layout. Error: {e}")
 
@@ -103,7 +103,7 @@ with col_table1:
     )
 
 with col_table2:
-    st.subheader("⚡ 2. Other Process Components")
+    st.subheader("2. Other Process Components (Reactors, Separators, etc")
     edited_components_df = st.data_editor(st.session_state["components_data"], num_rows="dynamic", use_container_width=True, key="components_editor")
 
 # --- RAW SYSTEM INPUT DATA CONVERSION ---
@@ -207,37 +207,45 @@ econ_summary = {
 }
 
 # --- METRIC EXPOSURE ---
-st.header("📊 Performance Metrics")
+st.header("Performance Metrics")
 m1, m2, m3 = st.columns(3)
 m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C")
 m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Incremental Payback: {payback_period_years:.2f} yrs")
 m3.metric("True Network Units (Base vs Integrated)", f"{base_hex_count} vs {integrated_total_hex} Units")
 
 # --- DOWNLOAD PIPELINE ---
-st.subheader("💾 Cloud Reporting Infrastructure")
+st.subheader("Cloud Reporting Infrastructure")
 pdf_data = create_pdf(econ_summary, qh_min, qc_min, pinch_hot, pinch_cold)
 st.download_button(label="📥 Download Executive Technical Report (PDF)", data=pdf_data, file_name="Pinch_Analysis_Report.pdf", mime="application/pdf")
 
 # --- GRAPHICAL ANALYTICAL TABS ---
-st.header("📈 Thermodynamic, Financial & Network Visualizations")
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Composite Curves", "📉 Grand Composite Curve (GCC)", "🕸️ HEN Grid Layout", "🍕 Energy Allocation (Pies)", "💰 Capital vs Operating Economics"])
+st.header("Thermodynamic, Financial & Network Visualizations")
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Composite Curves", "Grand Composite Curve (GCC)", "HEN Grid Layout", "Energy Allocation Pie Charts", "💰 Capital vs Operating Economics"])
 
 with tab1:
     st.subheader("Temperature - Enthalpy Cumulative Diagrams (T-H Curves)")
-    hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=True)
+    
+    # 1. ΘΕΡΜΗ ΣΥΝΘΕΤΙΚΗ ΚΑΜΠΥΛΗ (Από χαμηλές προς υψηλές θερμοκρασίες)
+    hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + 
+                                    [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=False)
     hot_H = [0.0]
     for i in range(len(hot_intervals)-1):
-        Th, Tl = hot_intervals[i], hot_intervals[i+1]
+        Tl, Th = hot_intervals[i], hot_intervals[i+1] # Tl=Χαμηλή, Th=Υψηλή
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Hot" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         hot_H.append(hot_H[-1] + cp_sum * (Th - Tl))
         
-    cold_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + [s["Tout"] for s in streams.values() if s["type"]=="Cold"])), reverse=True)
-    cold_H = [qc_min]
+    # 2. ΨΥΧΡΗ ΣΥΝΘΕΤΙΚΗ ΚΑΜΠΥΛΗ (Από χαμηλές προς υψηλές θερμοκρασίες)
+    cold_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + 
+                                     [s["Tout"] for s in streams.values() if s["type"]=="Cold"])), reverse=False)
+    
+    # Ξεκινά αυστηρά από το qc_min στη χαμηλότερη θερμοκρασία
+    cold_H = [qc_min] 
     for i in range(len(cold_intervals)-1):
-        Th, Tl = cold_intervals[i], cold_intervals[i+1]
+        Tl, Th = cold_intervals[i], cold_intervals[i+1] # Tl=Χαμηλή, Th=Υψηλή
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Cold" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         cold_H.append(cold_H[-1] + cp_sum * (Th - Tl))
         
+    # 3. ΣΧΕΔΙΑΣΗ ΓΡΑΦΗΜΑΤΟΣ
     fig_cc, ax_cc = plt.subplots(figsize=(10, 4))
     ax_cc.plot(hot_H, hot_intervals, color="red", label="Hot Composite Curve", lw=2.5)
     ax_cc.plot(cold_H, cold_intervals, color="blue", label="Cold Composite Curve", lw=2.5)
