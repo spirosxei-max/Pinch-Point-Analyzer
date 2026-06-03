@@ -10,7 +10,7 @@ st.set_page_config(layout="wide")
 st.title("🔥 Enterprise Pinch Point Analyzer & HEN Synthesizer")
 st.write("Industrial Heat Exchanger Network Design with Dynamic 5-Year Horizons & Clean Utility Layouts")
 
-# --- EXECUTIVE PDF REPORT GENERATION ---
+# --- EXECUTIVE PDF REPORT GENERATION (FIXED FOR STREAMLIT) ---
 def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
     pdf = FPDF()
     pdf.add_page()
@@ -34,10 +34,17 @@ def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
         pdf.cell(40, 10, f"{key}: {clean_val}")
         pdf.ln(10)
         
-    pdf_bytes = pdf.output(dest="S")
-    if isinstance(pdf_bytes, str):
-        pdf_bytes = pdf_bytes.encode("latin-1")
-    return pdf_bytes
+    # ΣΩΣΤΗ ΜΕΤΑΤΡΟΠΗ ΣΕ BYTES ΓΙΑ ΤΟ STREAMLIT DOWNLOAD BUTTON
+    pdf_output = pdf.output(dest="S")
+    if isinstance(pdf_output, str):
+        # fpdf1 / fpdf2 επιστρέφει string σε latin-1
+        return bytes(pdf_output, "latin-1")
+    elif isinstance(pdf_output, bytearray):
+        # fpdf2 σε ορισμένες εκδόσεις επιστρέφει bytearray
+        return bytes(pdf_output)
+    else:
+        return pdf_output
+
 
 # --- SIDEBAR CONFIGURATION & ECONOMIC INPUTS ---
 st.sidebar.header("Model Configuration")
