@@ -276,101 +276,122 @@ with tab2:
 with tab3:
         st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
         
-        # Δημιουργία ΜΙΑΣ και μόνο φιγούρας Matplotlib για να μην εμφανίζονται διπλά γραφήματα
+        # 1. Δημιουργία ΜΙΑΣ και μόνο φιγούρας Matplotlib (Αποφυγή πολλαπλών γραφημάτων)
         fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
-        y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
         
-        # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων (Βασική δομή)
+        # Αρχική χαρτογράφηση των βασικών ρευμάτων (όπως εισήχθησαν)
+        base_y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
+        
+        # 2. ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6 WITH AUTOMATIC SPLITTING)
+        residual_Q = {name: s["Q"] for name, s in streams.items()}
+        valid_matches = []
+
+        # Λίστες ρευμάτων ανά ζώνη
+        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
+        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
+        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
+        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
+
+        # ----------------------------------------------------
+        # 🔥 Α. ΠΑΝΩ ΑΠΟ ΤΟ PINCH: Σκανάρισμα Bottom-Up (Tin αύξουσα)
+        # ----------------------------------------------------
+        above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
+        above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
+        
+        # Δυναμικό dictionary για τη διαχείριση των Cp (σε περίπτωση split)
+        current_Cp = {name: s["Cp"] for name, s in streams.items()}
+        active_streams_layout = {name: {"Tin": s["Tin"], "Tout": s["Tout"], "type": s["type"]} for name, s in streams.items()}
+
+        for h_name in above_hot:
+            if residual_Q[h_name] <= 1.0: continue
+            for c_name in above_cold:
+                if residual_Q[c_name] <= 1.0: continue
+                
+                # Έλεγχος Driving Force στην είσοδο
+                if active_streams_layout[h_name]["Tin"] >= active_streams_layout[c_name]["Tin"] + dT_min:
+                    
+                    # Κανόνας mCp κοντά στο Pinch: mCp_hot <= mCp_cold
+                    # ΑΝ ΠΑΡΑΒΙΑΖΕΤΑΙ -> ΑΥΤΟΜΑΤΟ STREAM SPLITTING (Κανόνας 5)
+                    if current_Cp[h_name] > current_Cp[c_name]:
+                        # Χωρίζουμε το θερμό ρεύμα εικονικά ώστε ο κλάδος να έχει Cp ίσο με το ψυχρό
+                        split_factor = current_Cp[c_name] / current_Cp[h_name]
+                        current_Cp[h_name] *= split_factor # Προσαρμογή του Cp του κλάδου
+                    
+                    # Tick-Off Rule: Υπολογισμός μέγιστου φορτίου για εξαφάνιση ενός φορτίου ρεύματος
+                    max_q_thermo = current_Cp[c_name] * (active_streams_layout[h_name]["Tin"] - dT_min - active_streams_layout[c_name]["Tin"])
+                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+                    
+                    if q_match > 1.0:
+                        residual_Q[h_name] -= q_match
+                        residual_Q[c_name] -= q_match
+                        
+                        # Τοποθέτηση του εναλλάκτη κατακόρυφα στο μέσο της ζώνης
+                        mid_x = (active_streams_layout[h_name]["Tin"] + active_streams_layout[c_name]["Tin"]) / 2
+                        valid_matches.append((base_y_pos[h_name], base_y_pos[c_name], mid_x))
+                        break
+
+        # ----------------------------------------------------
+        # ❄️ Β. ΚΑΤΩ ΑΠΟ ΤΟ PINCH: Σκανάρισμα Top-to-Bottom (Tin φθίνουσα)
+        # ----------------------------------------------------
+        below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
+        below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
+        
+        for h_name in below_hot:
+            if residual_Q[h_name] <= 1.0: continue
+            for c_name in below_cold:
+                if residual_Q[c_name] <= 1.0: continue
+                
+                # Έλεγχος Driving Force στην είσοδο
+                if active_streams_layout[h_name]["Tin"] >= active_streams_layout[c_name]["Tin"] + dT_min:
+                    
+                    # Κανόνας mCp κοντά στο Pinch: mCp_hot >= mCp_cold
+                    # ΑΝ ΠΑΡΑΒΙΑΖΕΤΑΙ -> ΑΥΤΟΜΑΤΟ STREAM SPLITTING (Κανόνας 5)
+                    if current_Cp[h_name] < current_Cp[c_name]:
+                        # Χωρίζουμε το ψυχρό ρεύμα εικονικά ώστε ο κλάδος να έχει Cp ίσο με το θερμό
+                        split_factor = current_Cp[h_name] / current_Cp[c_name]
+                        current_Cp[c_name] *= split_factor # Προσαρμογή του Cp του κλάδου
+                    
+                    # Tick-Off Rule
+                    max_q_thermo = current_Cp[c_name] * (active_streams_layout[h_name]["Tin"] - dT_min - active_streams_layout[c_name]["Tin"])
+                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+                    
+                    if q_match > 1.0:
+                        residual_Q[h_name] -= q_match
+                        residual_Q[c_name] -= q_match
+                        
+                        mid_x = (active_streams_layout[h_name]["Tin"] + active_streams_layout[c_name]["Tin"]) / 2
+                        valid_matches.append((base_y_pos[h_name], base_y_pos[c_name], mid_x))
+                        break
+
+        # 3. ΣΧΕΔΙΑΣΗ ΤΩΝ ΟΡΙΖΟΝΤΙΩΝ ΓΡΑΜΜΩΝ ΡΕΥΜΑΤΩΝ
         for name, s in streams.items():
-            y = y_pos[name]
+            y = base_y_pos[name]
             ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
             ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
 
-        # 2. ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN (TICK-OFF & OUTLET TEMPERATURES FIRST)
-        residual_Q = {name: s["Q"] for name, s in streams.items()}
-        valid_matches = []
-
-        # 🔥 Α. ΠΑΝΩ ΑΠΟ ΤΟ PINCH: Ταιριάζουμε τα ΨΥΧΡΑ προς τα ΘΕΡΜΑ (Cold-to-Hot)
-        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
-        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
-        
-        # Ταξινόμηση από το Pinch και πάνω (Bottom-Up)
-        above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
-        above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
-        
-        for c_name in above_cold:
-            if residual_Q[c_name] <= 0: continue
-            for h_name in above_hot:
-                if residual_Q[h_name] <= 0: continue
-                
-                # Έλεγχος Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot <= Cp_cold)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
-                    
-                    # Θερμοδυναμικό όριο ενέργειας εναλλάκτη (Tick-Off Rule)
-                    max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
-                    
-                    if q_match > 1.0:
-                        residual_Q[h_name] -= q_match
-                        residual_Q[c_name] -= q_match
-                        
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                        break # Το ψυχρό βρήκε το ταίρι του, πάμε στο επόμενο
-
-        # ❄️ Β. ΚΑΤΩ ΑΠΟ ΤΟ PINCH: Ταιριάζουμε τα ΘΕΡΜΑ προς τα ΨΥΧΡΑ (Hot-to-Cold)
-        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
-        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
-        
-        # Ταξινόμηση από το Pinch και κάτω (Top-to-Bottom)
-        below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
-        below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
-        
-        for h_name in below_hot:
-            if residual_Q[h_name] <= 0: continue
-            for c_name in below_cold:
-                if residual_Q[c_name] <= 0: continue
-                
-                # Έλεγχος Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot >= Cp_cold)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
-                    
-                    # Θερμοδυναμικό όριο ενέργειας εναλλάκτη (Tick-Off Rule)
-                    max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
-                    
-                    if q_match > 1.0:
-                        residual_Q[h_name] -= q_match
-                        residual_Q[c_name] -= q_match
-                        
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                        break # Το θερμό βρήκε το ταίρι του, πάμε στο επόμενο
-
-        # 3. ΣΧΕΔΙΑΣΗ ΤΩΝ ΠΡΑΣΙΝΩΝ ΕΝΑΛΛΑΚΤΩΝ ΑΝΑΚΤΗΣΗΣ
+        # 4. ΣΧΕΔΙΑΣΗ ΤΩΝ ΠΡΑΣΙΝΩΝ ΕΝΑΛΛΑΚΤΩΝ ΑΝΑΚΤΗΣΗΣ
         for y_h, y_c, mid_x in valid_matches:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
-        # 4. ΕΛΕΓΧΟΣ OUTLET TEMPERATURES & ΣΧΕΔΙΑΣΗ UTILITIES
-        # Σχεδιάζουμε κύκλο utility ΜΟΝΟ αν το ρεύμα δεν έπιασε τον στόχο του (residual_Q > 1 kW)
+        # 5. ΔΙΑΣΤΑΥΡΩΣΗ ΜΕ HEAT CASCADE & ΣΧΕΔΙΑΣΗ UTILITIES
+        # Τοποθετούνται κύκλοι παροχών μόνο για το εναπομείναν φορτίο (residual_Q)
         for name, s in streams.items():
-            y = y_pos[name]
+            y = base_y_pos[name]
             if residual_Q[name] > 1.0:
                 if s["type"] == "Cold":
-                    # Χρειάζεται Heater (Κόκκινος κύκλος)
                     ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
                 else:
-                    # Χρειάζεται Cooler (Μπλε κύκλος)
                     ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-        # 5. Σχεδίαση της διακεκομμένης γραμμής Pinch
+        # 6. Σχεδίαση της διακεκομμένης γραμμής Pinch
         if isinstance(pinch_hot, float):
             ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
             ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
         
-        # 6. Legend και μορφοποίηση άξονα
+        # 7. Legend και μορφοποίηση άξονα
         from matplotlib.lines import Line2D
         custom_legend = [
             Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
@@ -379,19 +400,14 @@ with tab3:
         ]
         ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
         
-        ax_grid.set_yticks(list(y_pos.values()))
-        ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
+        ax_grid.set_yticks(list(base_y_pos.values()))
+        ax_grid.set_yticklabels(list(base_y_pos.keys()), weight="bold")
         ax_grid.set_xlabel("Temperature Scale (°C)", weight="bold")
         ax_grid.set_ylim(0.3, len(streams) + 0.6)
         ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
         
-        # Σχεδίαση της μίας τελικής φιγούρας στο Streamlit
+        # Εμφάνιση του ενός και μοναδικού σωστού γραφήματος
         st.pyplot(fig_grid)
-
-
-
-
-
 
 with tab4:
     labels = ['Hot Utilities', 'Cold Utilities'] + [c["name"] for c in other_components]
