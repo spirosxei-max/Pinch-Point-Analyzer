@@ -81,7 +81,7 @@ if "components_data" not in st.session_state:
 col_table1, col_table2 = st.columns(2)
 
 with col_table1:
-    st.subheader("📋 1. Process Streams Data")
+    st.subheader("1. Process Streams Data")
     
     # NEW: Using st.column_config.SelectboxColumn to enforce dropdown choices instead of typing
     edited_df = st.data_editor(
@@ -291,12 +291,34 @@ with tab3:
         else:
             ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-    for i in range(hx_process_count):
-        h_name, c_name = hot_st[i], cold_st[i]
-        y_h, y_c = y_pos[h_name], y_pos[c_name]
-        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-        ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
-        ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
+        # 2. ΕΞΥΠΝΟΣ ΑΛΓΟΡΙΘΜΟΣ ΣΥΝΔΕΣΗΣ ΕΝΑΛΛΑΚΤΩΝ (MATCHING LOGIC)
+    # Αντί για τυχαία σύνδεση, ταιριάζουμε ρεύματα που είναι θερμοδυναμικά εφικτά
+    placed_exchangers = 0
+    
+    for h_name in hot_st:
+        for c_name in cold_st:
+            # Έλεγχος αν υπάρχει επικάλυψη θερμοκρασιών με επαρκές Driving Force (ΔT_min)
+            # Το θερμό ρεύμα πρέπει να είναι πιο ζεστό από την είσοδο του ψυχρού
+            if streams[h_name]["Tin"] > streams[c_name]["Tin"] + dT_min:
+                
+                y_h = y_pos[h_name]
+                y_c = y_pos[c_name]
+                
+                # Υπολογισμός των πραγματικών σημείων τοποθέτησης στο διάγραμμα
+                # Τοποθετούμε τον εναλλάκτη κοντά στην περιοχή μέγιστης ανάκτησης
+                x_hot_match = streams[h_name]["Tin"] - dT_min
+                x_cold_match = streams[c_name]["Tin"]
+                
+                # Σχεδίαση της κάθετης πράσινης γραμμής σύνδεσης μεταξύ των δύο ρευμάτων
+                ax_grid.plot([x_hot_match, x_cold_match], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
+                
+                # Τοποθέτηση των κύκλων στις ακριβείς θερμοκρασίες του κάθε ρεύματος
+                ax_grid.plot(x_hot_match, y_h, marker="o", color="green", markersize=10, zorder=4)
+                ax_grid.plot(x_cold_match, y_c, marker="o", color="green", markersize=10, zorder=4)
+                
+                placed_exchangers += 1
+                break # Σταματάμε στο πρώτο έγκυρο match για αυτό το θερμό ρεύμα
+
 
     if isinstance(pinch_hot, float):
         ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
