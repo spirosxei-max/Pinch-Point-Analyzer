@@ -302,40 +302,24 @@ with tab2:
         above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
         above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
         
-        for h_name in above_hot:
+                for h_name in above_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in above_cold:
                 if residual_Q[c_name] <= 0: continue
                 
-                # Κανόνας 3: Έλεγχος Driving Force στην είσοδο
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                # Κανόνας 3 & 5: Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot <= Cp_cold)
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
                     
-                    # Κανόνας 5: Αυστηρό Κριτήριο CP κοντά στο Pinch (Cp_hot <= Cp_cold)
-                    # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
-                    if streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
-                        
-                # 🎯 ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΜΕΣΑ ΣΤΑ LOOPS ΤΩΝ ΕΝΑΛΛΑΚΤΩΝ (ABOVE & BELOW PINCH):
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-                    
-                    # Υπολογισμός του μέγιστου θερμοδυναμικά επιτρεπόμενου φορτίου (Driving Force Cap)
-                    # για να μην τέμνονται οι θερμοκρασίες λειτουργίας του εναλλάκτη
-                    if s["type"] == "Cold":
-                        max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-                    else:
-                        max_q_thermo = streams[h_name]["Cp"] * (streams[h_name]["Tin"] - (streams[c_name]["Tin"] + dT_min))
-                    
-                    # Το πραγματικό φορτίο του εναλλάκτη είναι το ελάχιστο των τριών περιορισμών
+                    # 💡 ΝΕΟΣ ΓΕΝΙΚΟΣ ΥΠΟΛΟΓΙΣΜΟΣ ΟΡΙΟΥ ΦΟΡΤΙΟΥ
+                    max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
                     q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
                     
-                    if q_match > 1.0: # Μόνο αν μεταφέρεται ουσιαστική ενέργεια
+                    if q_match > 1.0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
-                        
-                        # Σχεδίαση καθαρής κάθετης γραμμής
                         mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
                         break
-
 
         # ----------------------------------------------------
         # ❄️ ΚΑΤΩ ΑΠΟ ΤΟ PINCH (BELOW PINCH)
@@ -348,36 +332,21 @@ with tab2:
         below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
         below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
         
-        for h_name in below_hot:
+                for h_name in below_hot:
             if residual_Q[h_name] <= 0: continue
             for c_name in below_cold:
                 if residual_Q[c_name] <= 0: continue
                 
-                # Κανόνας 3: Έλεγχος Driving Force στην είσοδο
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
+                # Κανόνας 3 & 5: Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot >= Cp_cold)
+                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
                     
-                    # Κανόνας 5: Αυστηρό Κριτήριο CP κοντά στο Pinch (Cp_hot >= Cp_cold)
-                    # Αν δεν ισχύει, το match απορρίπτεται θερμοδυναμικά (απαιτείται Split)
-                    if streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
-                        
-                # 🎯 ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΜΕΣΑ ΣΤΑ LOOPS ΤΩΝ ΕΝΑΛΛΑΚΤΩΝ (ABOVE & BELOW PINCH):
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-                    
-                    # Υπολογισμός του μέγιστου θερμοδυναμικά επιτρεπόμενου φορτίου (Driving Force Cap)
-                    # για να μην τέμνονται οι θερμοκρασίες λειτουργίας του εναλλάκτη
-                    if s["type"] == "Cold":
-                        max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-                    else:
-                        max_q_thermo = streams[h_name]["Cp"] * (streams[h_name]["Tin"] - (streams[c_name]["Tin"] + dT_min))
-                    
-                    # Το πραγματικό φορτίο του εναλλάκτη είναι το ελάχιστο των τριών περιορισμών
+                    # 💡 ΝΕΟΣ ΓΕΝΙΚΟΣ ΥΠΟΛΟΓΙΣΜΟΣ ΟΡΙΟΥ ΦΟΡΤΙΟΥ
+                    max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
                     q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
                     
-                    if q_match > 1.0: # Μόνο αν μεταφέρεται ουσιαστική ενέργεια
+                    if q_match > 1.0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
-                        
-                        # Σχεδίαση καθαρής κάθετης γραμμής
                         mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
                         break
