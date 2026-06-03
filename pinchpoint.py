@@ -273,7 +273,7 @@ with tab2:
     ax_gcc.legend()
     st.pyplot(fig_gcc)
 
-        with tab3:
+    with tab3:
         st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
         fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
         y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
