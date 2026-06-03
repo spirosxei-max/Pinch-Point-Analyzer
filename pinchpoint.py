@@ -7,7 +7,7 @@ from fpdf import FPDF
 
 st.set_page_config(layout="wide")
 
-st.title("Pinch Point Analyzer & HEN Synthesizer")
+st.title("🔥 Enterprise Pinch Point Analyzer & HEN Synthesizer")
 st.write("Industrial Heat Exchanger Network Design with Dynamic 5-Year Horizons & Clean Utility Layouts")
 
 # --- EXECUTIVE PDF REPORT GENERATION ---
@@ -34,11 +34,14 @@ def create_pdf(econ_summary, qh, qc, pinch_h, pinch_c):
         pdf.cell(40, 10, f"{key}: {clean_val}")
         pdf.ln(10)
         
-    return bytes(pdf.output())
+    pdf_bytes = pdf.output(dest="S")
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin-1")
+    return pdf_bytes
 
 # --- SIDEBAR CONFIGURATION & ECONOMIC INPUTS ---
 st.sidebar.header("Model Configuration")
-dT_min = st.sidebar.slider("Minimum Approach Temperature (ΔT min) °C", 15, 50, 10)
+dT_min = st.sidebar.slider("Minimum Approach Temperature (ΔT min) °C", min_value=5, max_value=50, value=10)
 
 st.sidebar.header("💰 Economic Parameters")
 cost_heating = st.sidebar.number_input("Hot Utility Cost (€/kWh)", value=0.04, format="%.4f")
@@ -51,7 +54,7 @@ area_cost_coeff = st.sidebar.number_input("Area Cost Coefficient (€/m²)", val
 estimated_area_base = st.sidebar.number_input("Base System Area needed (m²)", value=150)
 estimated_area_integrated = st.sidebar.number_input("Integrated System Area needed (m²)", value=250)
 
-# --- INITIALIZATION (PURE BLANK STATE - NO HARDCODED VALUES) ---
+# --- INITIALIZATION ---
 st.header("Data Initialization")
 
 empty_streams = pd.DataFrame([
@@ -62,7 +65,6 @@ empty_components = pd.DataFrame([
     {"Component Name": "", "Load (MW)": None}
 ])
 
-# Handle Excel Upload
 uploaded_file = st.sidebar.file_uploader("Import Network Data from Excel", type=["xlsx"])
 if uploaded_file is not None:
     try:
@@ -77,13 +79,10 @@ if "streams_data" not in st.session_state:
 if "components_data" not in st.session_state:
     st.session_state["components_data"] = empty_components
 
-# --- GUI INPUT MATRIX DATA EDITORS ---
 col_table1, col_table2 = st.columns(2)
 
 with col_table1:
     st.subheader("1. Process Streams Data")
-    
-    # NEW: Using st.column_config.SelectboxColumn to enforce dropdown choices instead of typing
     edited_df = st.data_editor(
         st.session_state["streams_data"], 
         num_rows="dynamic", 
@@ -103,10 +102,10 @@ with col_table1:
     )
 
 with col_table2:
-    st.subheader("2. Other Process Components (Reactors, Separators, etc")
+    st.subheader("2. Other Process Components")
     edited_components_df = st.data_editor(st.session_state["components_data"], num_rows="dynamic", use_container_width=True, key="components_editor")
 
-# --- RAW SYSTEM INPUT DATA CONVERSION ---
+# --- DATA CONVERSION ---
 streams = {}
 stream_names_list = []
 if edited_df is not None and not edited_df.empty:
@@ -145,7 +144,6 @@ if edited_components_df is not None and not edited_components_df.empty:
         except Exception:
             continue
 
-# --- BLANK STATE INTERACTION CONTROL ---
 if len(streams) < 2:
     st.markdown("---")
     st.info("📌 **Waiting for user input matrix...** Please add your stream details above or upload an Excel file to generate analysis.")
@@ -182,7 +180,7 @@ except Exception:
 total_hot_load = sum(s["Q"] for s in streams.values() if s["type"] == "Hot")
 total_cold_load = sum(s["Q"] for s in streams.values() if s["type"] == "Cold")
 
-# --- FINANCIAL ACCELERATION LOGIC ---
+# --- FINANCIAL LOGIC ---
 op_cost_before = ((total_cold_load * cost_heating) + (total_hot_load * cost_cooling)) * op_hours
 op_cost_after = ((qh_min * cost_heating) + (qc_min * cost_cooling)) * op_hours
 annual_savings = op_cost_before - op_cost_after
@@ -190,62 +188,25 @@ annual_savings = op_cost_before - op_cost_after
 hot_st = [n for n in stream_names_list if streams[n]["type"] == "Hot"]
 cold_st = [n for n in stream_names_list if streams[n]["type"] == "Cold"]
 
-base_hex_count = len(stream_names_list)
-capex_base = (base_hex_count * fixed_hex_cost) + (estimated_area_base * area_cost_coeff)
-
-hx_process_count = min(len(hot_st), len(cold_st))
-integrated_total_hex = hx_process_count + base_hex_count 
-capex_integrated = (integrated_total_hex * fixed_hex_cost) + (estimated_area_integrated * area_cost_coeff)
-payback_period_years = (capex_integrated - capex_base) / annual_savings if annual_savings > 0 else float('inf')
-
-econ_summary = {
-    "Operating Cost Before Integration": f"€{op_cost_before:,.2f}/yr",
-    "Operating Cost After Integration": f"€{op_cost_after:,.2f}/yr",
-    "Base System CAPEX Equipment Cost": f"€{capex_base:,.2f}",
-    "Integrated HEN Capital Investment (CAPEX)": f"€{capex_integrated:,.2f}",
-    "Simple Payback Period on Incremental Investment": f"{payback_period_years:.2f} Years"
-}
-
-# --- METRIC EXPOSURE ---
-st.header("Performance Metrics")
-m1, m2, m3 = st.columns(3)
-m1.metric("Pinch Temperature (Hot/Cold)", f"{pinch_hot} °C / {pinch_cold} °C")
-m2.metric("Annual Utility Cost Saved", f"€{annual_savings:,.0f}", f"Incremental Payback: {payback_period_years:.2f} yrs")
-m3.metric("True Network Units (Base vs Integrated)", f"{base_hex_count} vs {integrated_total_hex} Units")
-
-# --- DOWNLOAD PIPELINE ---
-st.subheader("Cloud Reporting Infrastructure")
-pdf_data = create_pdf(econ_summary, qh_min, qc_min, pinch_hot, pinch_cold)
-st.download_button(label="📥 Download Executive Technical Report (PDF)", data=pdf_data, file_name="Pinch_Analysis_Report.pdf", mime="application/pdf")
-
-# --- GRAPHICAL ANALYTICAL TABS ---
-st.header("Thermodynamic, Financial & Network Visualizations")
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Composite Curves", "Grand Composite Curve (GCC)", "HEN Grid Layout", "Energy Allocation Pie Charts", "💰 Capital vs Operating Economics"])
+# --- GUI DASHBOARD TABS ---
+tab1, tab2, tab3 = st.tabs(["📊 Composite Curves", "📈 Grand Composite", "Clean Grid Layout"])
 
 with tab1:
     st.subheader("Temperature - Enthalpy Cumulative Diagrams (T-H Curves)")
-    
-    # 1. ΘΕΡΜΗ ΣΥΝΘΕΤΙΚΗ ΚΑΜΠΥΛΗ (Από χαμηλές προς υψηλές θερμοκρασίες)
-    hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + 
-                                    [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=False)
+    hot_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Hot"] + [s["Tout"] for s in streams.values() if s["type"]=="Hot"])), reverse=False)
     hot_H = [0.0]
     for i in range(len(hot_intervals)-1):
-        Tl, Th = hot_intervals[i], hot_intervals[i+1] # Tl=Χαμηλή, Th=Υψηλή
+        Tl, Th = hot_intervals[i], hot_intervals[i+1]
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Hot" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         hot_H.append(hot_H[-1] + cp_sum * (Th - Tl))
         
-    # 2. ΨΥΧΡΗ ΣΥΝΘΕΤΙΚΗ ΚΑΜΠΥΛΗ (Από χαμηλές προς υψηλές θερμοκρασίες)
-    cold_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + 
-                                     [s["Tout"] for s in streams.values() if s["type"]=="Cold"])), reverse=False)
-    
-    # Ξεκινά αυστηρά από το qc_min στη χαμηλότερη θερμοκρασία
-    cold_H = [qc_min] 
+    cold_intervals = sorted(list(set([s["Tin"] for s in streams.values() if s["type"]=="Cold"] + [s["Tout"] for s in streams.values() if s["type"]=="Cold"])), reverse=False)
+    cold_H = [qc_min]
     for i in range(len(cold_intervals)-1):
-        Tl, Th = cold_intervals[i], cold_intervals[i+1] # Tl=Χαμηλή, Th=Υψηλή
+        Tl, Th = cold_intervals[i], cold_intervals[i+1]
         cp_sum = sum(s["Cp"] for s in streams.values() if s["type"]=="Cold" and min(s["Tin"], s["Tout"]) <= Tl and max(s["Tin"], s["Tout"]) >= Th)
         cold_H.append(cold_H[-1] + cp_sum * (Th - Tl))
         
-    # 3. ΣΧΕΔΙΑΣΗ ΓΡΑΦΗΜΑΤΟΣ
     fig_cc, ax_cc = plt.subplots(figsize=(10, 4))
     ax_cc.plot(hot_H, hot_intervals, color="red", label="Hot Composite Curve", lw=2.5)
     ax_cc.plot(cold_H, cold_intervals, color="blue", label="Cold Composite Curve", lw=2.5)
@@ -259,214 +220,106 @@ with tab2:
     st.subheader("Grand Composite Curve (GCC) - Enthalpy Cascade Diagram")
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
-    
-    # 🎯 Βελτιωμένη οπτική απεικόνιση των Utilities στις άκρες της GCC
-    # Σχεδιάζει τη θερμή παροχή ακριβώς στην κορυφή (πρώτο interval)
-    ax_gcc.plot([0, feasible_cascade[0]], [intervals[0], intervals[0]], color="red", lw=3, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
-    # Σχεδιάζει την ψυχρή παροχή ακριβώς στη βάση (τελευταίο interval)
-    ax_gcc.plot([0, feasible_cascade[-1]], [intervals[-1], intervals[-1]], color="dodgerblue", lw=3, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
-
-    
-    ax_gcc.set_xlabel("ΔΗ (kW)")
+    ax_gcc.plot([0, qh_min], [intervals[0], intervals[0]], color="red", lw=2.5, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
+    ax_gcc.plot([0, qc_min], [intervals[-1], intervals[-1]], color="dodgerblue", lw=2.5, linestyle="-", marker="s", label=f"Cold Utility Target ({qc_min:,.1f} kW)")
+    ax_gcc.set_xlabel("ΔH (kW)")
     ax_gcc.set_ylabel("Shifted Temperature T* (°C)")
     ax_gcc.grid(True, linestyle=":", alpha=0.6)
     ax_gcc.legend()
     st.pyplot(fig_gcc)
 
-    with tab3:
-        st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
-        fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
-        y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
-        
-        # 1. Σχεδίαση των οριζόντιων γραμμών των ρευμάτων
-        for name, s in streams.items():
-            y = y_pos[name]
-            ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
-            ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
-            
-            ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
-            ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
-                        
-        # === ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6 SIMULTANEOUS) ===
-        residual_Q = {name: s["Q"] for name, s in streams.items()}
-        valid_matches = []
-
-        # ----------------------------------------------------
-        # 🔥 ΠΑΝΩ ΑΠΟ ΤΟ PINCH (ABOVE PINCH)
-        # ----------------------------------------------------
-        # Κανόνας 1 & 2: Ξεκινάμε από το Pinch και πάμε προς τα πάνω (Bottom-Up)
-        above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
-        above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
-        
-        # Ταξινόμηση από το Pinch προς τα πάνω (Αύξουσα θερμοκρασία)
-        above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
-        above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
-        
-            for h_name in above_hot:
-            if residual_Q[h_name] <= 0: continue
-            for c_name in above_cold:
-                if residual_Q[c_name] <= 0: continue
-                
-                # Κανόνας 3 & 5: Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot <= Cp_cold)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
-                    
-                    # 💡 ΝΕΟΣ ΓΕΝΙΚΟΣ ΥΠΟΛΟΓΙΣΜΟΣ ΟΡΙΟΥ ΦΟΡΤΙΟΥ
-                    max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
-                    
-                    if q_match > 1.0:
-                        residual_Q[h_name] -= q_match
-                        residual_Q[c_name] -= q_match
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                        break
-
-        # ----------------------------------------------------
-        # ❄️ ΚΑΤΩ ΑΠΟ ΤΟ PINCH (BELOW PINCH)
-        # ----------------------------------------------------
-        # Κανόνας 1 & 2: Ξεκινάμε από το Pinch και πάμε προς τα κάτω (Top-to-Bottom)
-        below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
-        below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
-        
-        # Ταξινόμηση από το Pinch προς τα κάτω (Φθίνουσα θερμοκρασία)
-        below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
-        below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
-        
-            for h_name in below_hot:
-            if residual_Q[h_name] <= 0: continue
-            for c_name in below_cold:
-                if residual_Q[c_name] <= 0: continue
-                
-                # Κανόνας 3 & 5: Driving Force στην είσοδο & Κριτήριο Cp (Cp_hot >= Cp_cold)
-                if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
-                    
-                    # 💡 ΝΕΟΣ ΓΕΝΙΚΟΣ ΥΠΟΛΟΓΙΣΜΟΣ ΟΡΙΟΥ ΦΟΡΤΙΟΥ
-                    max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
-                    q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
-                    
-                    if q_match > 1.0:
-                        residual_Q[h_name] -= q_match
-                        residual_Q[c_name] -= q_match
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
-                        valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
-                        break
-
-
-        # 3. ΣΧΕΔΙΑΣΗ ΤΩΝ ΤΕΛΙΚΩΝ ΕΓΚΥΡΩΝ ΕΝΑΛΛΑΚΤΩΝ
-        for y_h, y_c, mid_x in valid_matches:
-            ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
-            ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
-                    
-        # ----------------------------------------------------
-        # 🎯 4. ΓΕΝΙΚΗ ΣΧΕΔΙΑΣΗ UTILITIES (ΧΩΡΙΣ ΠΕΡΙΟΡΙΣΜΟΥΣ ΖΩΝΗΣ)
-        # ----------------------------------------------------
-        allocated_hot_utility = 0.0
-        allocated_cold_utility = 0.0
-
-        for name, s in streams.items():
-            y = y_pos[name]
-            
-            # Αν έχει απομείνει ανικανοποίητο φορτίο στο ρεύμα, βάζουμε utility
-            # ανεξάρτητα από το αν βρίσκεται πάνω ή κάτω από το pinch
-            if residual_Q[name] > 0.1: 
-                
-                # Α. ΨΥΧΡΑ ΡΕΥΜΑΤΑ: Χρειάζονται Heater (Κόκκινος κύκλος στην έξοδο Tout)
-                if s["type"] == "Cold":
-                    q_heater = residual_Q[name]
-                    allocated_hot_utility += q_heater
-                    
-                    ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-                    ax_grid.text(s["Tout"], y + 0.25, f"H: {q_heater:,.0f} kW", fontsize=8, color="darkred", ha="center", weight="bold")
-                
-                # Β. ΘΕΡΜΑ ΡΕΥΜΑΤΑ: Χρειάζονται Cooler (Μπλε κύκλος στην έξοδο Tout)
-                elif s["type"] == "Hot":
-                    q_cooler = residual_Q[name]
-                    allocated_cold_utility += q_cooler
-                    
-                    ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
-                    ax_grid.text(s["Tout"], y + 0.25, f"C: {q_cooler:,.0f} kW", fontsize=8, color="dodgerblue", ha="center", weight="bold")
-
-        # Υπολογισμός της επιπλέον ενέργειας που καταναλώνεται λόγω μη-βέλτιστης ολοκλήρωσης
-        penalty_hot = max(0.0, allocated_hot_utility - qh_min)
-        penalty_cold = max(0.0, allocated_cold_utility - qc_min)
-        
-        if penalty_hot > 1.0:
-            st.sidebar.info(f"ℹ️ Ενεργειακή Ποινή: Το δίκτυο καταναλώνει {penalty_hot:,.0f} kW επιπλέον θέρμανση "
-                            f"από το target του καταρράκτη ({qh_min:,.0f} kW).")
-
-
-        # 4. Σχεδίαση της διακεκομμένης γραμμής Pinch
-        if isinstance(pinch_hot, float):
-            ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
-            ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
-        
-        # 5. Legend και μορφοποίηση άξονα
-        from matplotlib.lines import Line2D
-        custom_legend = [
-            Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
-            Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
-            Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
-        ]
-        ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
-        
-        ax_grid.set_yticks(list(y_pos.values()))
-        ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
-        ax_grid.set_xlabel("Temperature Scale (°C)", weight="bold")
-        ax_grid.set_ylim(0.3, len(streams) + 0.6)
-        ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
-        st.pyplot(fig_grid)
-
-
-with tab4:
-    labels = ['Hot Utilities', 'Cold Utilities'] + [c["name"] for c in other_components]
-    sizes_before = [total_cold_load / 1000, total_hot_load / 1000] + [c["mw"] for c in other_components]
-    sizes_after = [qh_min / 1000, qc_min / 1000] + [c["mw"] for c in other_components]
+with tab3:
+    st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
+    fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
+    y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
     
-    colors_map = ['#FF0000', '#0070C0', '#FFC000', '#7030A0', '#ED7D31', '#70AD47']
-    if len(labels) > len(colors_map):
-        colors_map += plt.cm.Accent(np.linspace(0, 1, len(labels) - len(colors_map))).tolist()
-    current_colors = colors_map[:len(labels)]
-    
-    fig_pie, (ax_p1, ax_p2) = plt.subplots(1, 2, figsize=(14, 6))
-    ax_p1.pie(sizes_before, autopct='%1.0f%%', startangle=140, colors=current_colors)
-    ax_p1.set_title(f"Before Heat Integration\n(Total: {sum(sizes_before):,.2f} MW)", weight='bold')
-    
-    ax_p2.pie(sizes_after, autopct='%1.0f%%', startangle=140, colors=current_colors)
-    ax_p2.set_title(f"After Heat Integration\n(Total: {sum(sizes_after):,.2f} MW)", weight='bold')
-    
-    fig_pie.legend(labels=labels, loc='lower center', ncol=3)
-    plt.subplots_adjust(bottom=0.2)
-    st.pyplot(fig_pie)
+    for name, s in streams.items():
+        y = y_pos[name]
+        ax_grid.plot([s["Tin"], s["Tout"]], [y, y], color="red" if s["type"]=="Hot" else "blue", lw=3.5)
+        ax_grid.text(s["Tin"], y + 0.15, f"{name}", fontsize=10, ha='right' if s["type"]=="Hot" else 'left', weight="bold")
+        ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
+        ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
 
-with tab5:
-    st.subheader("💰 Isolated 5-Year Financial Asset Horizons")
-    col_g1, col_g2 = st.columns(2)
-    years_range = list(range(0, 6))
+    residual_Q = {name: s["Q"] for name, s in streams.items()}
+    valid_matches = []
+
+    # 🔥 ABOVE PINCH LOOP
+    above_hot = [n for n in hot_st if streams[n]["Tin"] >= pinch_hot]
+    above_cold = [n for n in cold_st if streams[n]["Tout"] >= pinch_cold]
+    above_hot = sorted(above_hot, key=lambda n: streams[n]["Tin"])
+    above_cold = sorted(above_cold, key=lambda n: streams[n]["Tin"])
     
-    base_capex_vector = [capex_base] * len(years_range)
-    base_opex_vector = [op_cost_before * y for y in years_range]
+    for h_name in above_hot:
+        if residual_Q[h_name] <= 0: continue
+        for c_name in above_cold:
+            if residual_Q[c_name] <= 0: continue
+            if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] <= streams[c_name]["Cp"]:
+                max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
+                q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+                if q_match > 1.0:
+                    residual_Q[h_name] -= q_match
+                    residual_Q[c_name] -= q_match
+                    mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+                    valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                    break
+
+    # ❄️ BELOW PINCH LOOP
+    below_hot = [n for n in hot_st if streams[n]["Tout"] <= pinch_hot]
+    below_cold = [n for n in cold_st if streams[n]["Tin"] <= pinch_cold]
+    below_hot = sorted(below_hot, key=lambda n: streams[n]["Tin"], reverse=True)
+    below_cold = sorted(below_cold, key=lambda n: streams[n]["Tout"], reverse=True)
     
-    int_capex_vector = [capex_integrated] * len(years_range)
-    int_opex_vector = [op_cost_after * y for y in years_range]
+    for h_name in below_hot:
+        if residual_Q[h_name] <= 0: continue
+        for c_name in below_cold:
+            if residual_Q[c_name] <= 0: continue
+            if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min and streams[h_name]["Cp"] >= streams[c_name]["Cp"]:
+                max_q_thermo = streams[c_name]["Cp"] * (streams[h_name]["Tin"] - dT_min - streams[c_name]["Tin"])
+                q_match = min(residual_Q[h_name], residual_Q[c_name], max_q_thermo)
+                if q_match > 1.0:
+                    residual_Q[h_name] -= q_match
+                    residual_Q[c_name] -= q_match
+                    mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
+                    valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
+                    break
+
+    # 3. ΣΧΕΔΙΑΣΗ ΠΡΑΣΙΝΩΝ ΕΝΑΛΛΑΚΤΩΝ
+    for y_h, y_c, mid_x in valid_matches:
+        ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
+        ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
+
+    # 4. ΣΧΕΔΙΑΣΗ UTILITIES (Μόνο αν residual_Q > 1 kW)
+    for name, s in streams.items():
+        y = y_pos[name]
+        if residual_Q[name] > 1.0:
+            if s["type"] == "Cold":
+                ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
+            else:
+                ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
+
+    # 5. ΓΡΑΜΜΗ PINCH
+    if isinstance(pinch_hot, float):
+        ax_grid.axvline(x=pinch_hot, color="gray", linestyle="--", alpha=0.5, lw=1.5)
+        ax_grid.text(pinch_hot, len(streams) + 0.4, f"Pinch Region ({pinch_hot}°C)", color="gray", ha="center", weight="bold", fontsize=9)
     
-    with col_g1:
-        st.markdown("**1. Unintegrated Base Plant Cost Profile (5-Year)**")
-        df_base_financials = pd.DataFrame({
-            "Operating Year": years_range,
-            "Constant Equipment CAPEX (€)": base_capex_vector,
-            "Accumulated Running Utilities (OPEX) (€)": base_opex_vector
-        })
-        df_base_financials.set_index("Operating Year", inplace=True)
-        st.line_chart(df_base_financials, color=["#777777", "#FF0000"])
-        st.caption("CAPEX is constant (flat line). OPEX scales up linearly from Year 0 representing cumulative energy bills.")
-        
-    with col_g2:
-        st.markdown("**2. Integrated HEN System Financial Profile (5-Year)**")
-        df_int_financials = pd.DataFrame({
-            "Operating Year": years_range,
-            "Constant Equipment CAPEX (€)": int_capex_vector,
-            "Accumulated Running Utilities (OPEX) (€)": int_opex_vector
-        })
-        df_int_financials.set_index("Operating Year", inplace=True)
-        st.line_chart(df_int_financials, color=["#428BCA", "#5CB85C"])
-        st.caption("CAPEX is higher but fixed. OPEX accumulates at a much lower slope, optimizing long-term lifecycle spending.")
+    # 6. LEGEND & ΜΟΡΦΟΠΟΙΗΣΗ
+    from matplotlib.lines import Line2D
+    custom_legend = [
+        Line2D([0], [0], marker='o', color='w', label='Process-to-Process Exchanger (Recovery)', markerfacecolor='green', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Heater (Auxiliary Hot Utility)', markerfacecolor='darkred', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Cooler (Auxiliary Cold Utility)', markerfacecolor='dodgerblue', markersize=10)
+    ]
+    ax_grid.legend(handles=custom_legend, loc='lower center', bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=9)
+    
+    ax_grid.set_yticks(list(y_pos.values()))
+    ax_grid.set_yticklabels(list(y_pos.keys()), weight="bold")
+    ax_grid.set_xlabel("Temperature Scale (°C)", weight="bold")
+    ax_grid.set_ylim(0.3, len(streams) + 0.6)
+    ax_grid.grid(axis='x', linestyle=':', alpha=0.5)
+    st.pyplot(fig_grid)
+
+# --- FINALIZE SIDEBAR DOWNLOAD ---
+econ_summary = {"Annual Operating Savings": f"€{annual_savings:,.2f}"}
+pdf_data = create_pdf(econ_summary, qh_min, qc_min, pinch_hot, pinch_cold)
+st.sidebar.download_button("📥 Download Executive PDF Report", data=pdf_data, file_name="pinch_report.pdf", mime="application/pdf")
+
