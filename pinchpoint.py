@@ -273,7 +273,7 @@ with tab2:
     ax_gcc.legend()
     st.pyplot(fig_gcc)
 
-    with tab3:
+        with tab3:
         st.subheader("Heat Exchanger Network (HEN) Clean Grid Layout")
         fig_grid, ax_grid = plt.subplots(figsize=(12, 5.5))
         y_pos = {name: len(streams) - idx for idx, name in enumerate(streams.keys())}
@@ -292,8 +292,9 @@ with tab2:
             else:
                 ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
-                # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
+        # 2. ΑΥΤΟΜΑΤΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6)
         residual_Q = {name: s["Q"] for name, s in streams.items()}
+        current_T = {name: s["Tin"] for name, s in streams.items()}
         valid_matches = []
 
         # 🔥 Πάνω από το Pinch (Above Pinch) - Κανόνας 2: Bottom-Up
@@ -304,15 +305,14 @@ with tab2:
         above_cold = sorted(above_cold, key=lambda n: streams[n]["Cp"], reverse=True)
         
         for h_name in above_hot:
-            if residual_Q[h_name] <= 0: continue
+            if residual_Q[h_name] <= 0: 
+                continue
             for c_name in above_cold:
-                if residual_Q[c_name] <= 0: continue
+                if residual_Q[c_name] <= 0: 
+                    continue
                 
-                # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
-                #  Αντικατάσταση της γραμμής ελέγχου "Κανόνας 3" και στις δύο ζώνες:
+                # Κανόνας 3: Έλεγχος διαθέσιμου Driving Force στην είσοδο (Μερική Ανάκτηση)
                 if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-
-                    
                     cp_h = streams[h_name]["Cp"]
                     cp_c = streams[c_name]["Cp"]
                     
@@ -323,7 +323,7 @@ with tab2:
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tout"]) / 2
+                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
 
         # ❄️ Κάτω από το Pinch (Below Pinch) - Κανόνας 2: Top-to-Bottom
@@ -334,15 +334,14 @@ with tab2:
         below_cold = sorted(below_cold, key=lambda n: streams[n]["Cp"], reverse=True)
         
         for h_name in below_hot:
-            if residual_Q[h_name] <= 0: continue
+            if residual_Q[h_name] <= 0: 
+                continue
             for c_name in below_cold:
-                if residual_Q[c_name] <= 0: continue
+                if residual_Q[c_name] <= 0: 
+                    continue
                 
-                # Κανόνας 3: Αυστηρός έλεγχος πλήρους θερμοδυναμικού παραθύρου (Όχι Crossover)
-               #  Αντικατάσταση της γραμμής ελέγχου "Κανόνας 3" και στις δύο ζώνες:
+                # Κανόνας 3: Έλεγχος διαθέσιμου Driving Force στην είσοδο (Μερική Ανάκτηση)
                 if streams[h_name]["Tin"] >= streams[c_name]["Tin"] + dT_min:
-
-                    
                     cp_h = streams[h_name]["Cp"]
                     cp_c = streams[c_name]["Cp"]
                     
@@ -353,7 +352,7 @@ with tab2:
                     if q_match > 0:
                         residual_Q[h_name] -= q_match
                         residual_Q[c_name] -= q_match
-                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tout"]) / 2
+                        mid_x = (streams[h_name]["Tin"] + streams[c_name]["Tin"]) / 2
                         valid_matches.append((y_pos[h_name], y_pos[c_name], mid_x))
 
         # 3. Σχεδίαση των τελικών, έγκυρων εναλλακτών (Καθαρές κάθετες γραμμές)
