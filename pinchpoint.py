@@ -260,7 +260,7 @@ with tab2:
     fig_gcc, ax_gcc = plt.subplots(figsize=(10, 5))
     ax_gcc.plot(feasible_cascade, intervals, color="black", marker="o", label="Grand Composite Curve", lw=2)
     
-       # 🎯 Βελτιωμένη οπτική απεικόνιση των Utilities στις άκρες της GCC
+    # 🎯 Βελτιωμένη οπτική απεικόνιση των Utilities στις άκρες της GCC
     # Σχεδιάζει τη θερμή παροχή ακριβώς στην κορυφή (πρώτο interval)
     ax_gcc.plot([0, feasible_cascade[0]], [intervals[0], intervals[0]], color="red", lw=3, linestyle="-", marker="s", label=f"Hot Utility Target ({qh_min:,.1f} kW)")
     # Σχεδιάζει την ψυχρή παροχή ακριβώς στη βάση (τελευταίο interval)
@@ -375,14 +375,42 @@ with tab3:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
 
-        # 5. ΕΛΕΓΧΟΣ OUTLET TEMPERATURES & ΣΧΕΔΙΑΣΗ UTILITIES
+                # 5. ΕΛΕΓΧΟΣ ΕΠΙΤΕΥΞΗΣ ΘΕΡΜΟΚΡΑΣΙΑΣ & ΔΙΑΣΤΑΥΡΩΣΗ ΜΕ ΚΑΤΑΡΡΑΚΤΗ (PINCH)
         for name, s in streams.items():
             y = y_pos[name]
-            if residual_Q[name] > 1.0:
-                if s["type"] == "Cold":
+            
+            # Υπολογίζουμε την πραγματική θερμοκρασία που κατάφερε να φτάσει το ρεύμα 
+            # μετά τους process-to-process εναλλάκτες
+            q_exchanged = s["Q"] - residual_Q[name]
+            dT_achieved = q_exchanged / s["Cp"] if s["Cp"] > 0 else 0
+            
+            if s["type"] == "Cold":
+                # Η τρέχουσα θερμοκρασία του ψυχρού ρεύματος μετά την ανάκτηση
+                current_T_out = s["Tin"] + dT_achieved
+                
+                # ΚΡΙΤΗΡΙΟ 1: Έχει πιάσει την επιθυμητή θερμοκρασία στόχου;
+                # ΚΡΙΤΗΡΙΟ 2: Βρίσκεται στην περιοχή που ο καταρράκτης επιβάλλει Heater (πάνω από το Pinch ή λόγω ΔT);
+                if current_T_out < s["Tout"]:
+                    # Σχεδίαση Heater (Κόκκινος κύκλος) στην τελική έξοδο Tout
                     ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-                else:
+                    
+                    # Αναγράφουμε το ακριβές φορτίο που ζητάει ο καταρράκτης για αυτό το διάστημα
+                    q_utility = residual_Q[name]
+                    ax_grid.text(s["Tout"], y + 0.25, f"H: {q_utility:,.0f} kW", fontsize=8, color="darkred", ha="center", weight="bold")
+            
+            elif s["type"] == "Hot":
+                # Η τρέχουσα θερμοκρασία του θερμού ρεύματος μετά την ανάκτηση
+                current_T_out = s["Tin"] - dT_achieved
+                
+                # ΚΡΙΤΗΡΙΟ 1: Έχει ψυχθεί όσο χρειαζόταν;
+                # ΚΡΙΤΗΡΙΟ 2: Βρίσκεται στην περιοχή που ο καταρράκτης επιβάλλει Cooler (κάτω από το Pinch);
+                if current_T_out > s["Tout"]:
+                    # Σχεδίαση Cooler (Μπλε κύκλος) στην τελική έξοδο Tout
                     ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
+                    
+                    q_utility = residual_Q[name]
+                    ax_grid.text(s["Tout"], y + 0.25, f"C: {q_utility:,.0f} kW", fontsize=8, color="dodgerblue", ha="center", weight="bold")
+
 
         # 6. Σχεδίαση της διακεκομμένης γραμμής Pinch
         if isinstance(pinch_hot, float):
@@ -446,7 +474,7 @@ with tab5:
         })
         df_base_financials.set_index("Operating Year", inplace=True)
         st.line_chart(df_base_financials, color=["#777777", "#FF0000"])
-        st.caption("CAPEX is constant (flat line). OPEX scales up linearly from Year 0 representing cumulative energy bills.")
+        st.caption("OPEX scales up linearly from Year 0 representing cumulative energy bills.")
         
     with col_g2:
         st.markdown("**2. Integrated HEN System Financial Profile (5-Year)**")
@@ -457,4 +485,4 @@ with tab5:
         })
         df_int_financials.set_index("Operating Year", inplace=True)
         st.line_chart(df_int_financials, color=["#428BCA", "#5CB85C"])
-        st.caption("CAPEX is higher but fixed. OPEX accumulates at a much lower slope, optimizing long-term lifecycle spending.")
+        st.caption("CAPEX is higher but OPEX accumulates at a much lower slope, optimizing long-term lifecycle spending.")
