@@ -286,13 +286,8 @@ with tab2:
             
             ax_grid.text(s["Tin"], y - 0.28, f"In: {s['Tin']}°C", fontsize=8, color="dimgray")
             ax_grid.text(s["Tout"], y - 0.28, f"Out: {s['Tout']}°C", fontsize=8, color="darkred" if s["type"]=="Cold" else "dodgerblue", weight="bold")
-            
-            if s["type"] == "Cold":
-                ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
-            else:
-                ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
-
-                               # === ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6 SIMULTANEOUS) ===
+                        
+        # === ΑΥΘΕΝΤΙΚΟΣ ΑΛΓΟΡΙΘΜΟΣ PINCH DESIGN METHOD (RULES 1-6 SIMULTANEOUS) ===
         residual_Q = {name: s["Q"] for name, s in streams.items()}
         valid_matches = []
 
@@ -365,7 +360,15 @@ with tab2:
         for y_h, y_c, mid_x in valid_matches:
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], color="green", linestyle="-", lw=2, zorder=3)
             ax_grid.plot([mid_x, mid_x], [y_h, y_c], marker="o", color="green", markersize=10, zorder=4)
-
+                    
+        # 🎯 ΕΞΥΠΝΗ ΣΧΕΔΙΑΣΗ UTILITIES: Σχεδιάζονται ΜΟΝΟ αν έχει περισσέψει φορτίο
+        for name, s in streams.items():
+            y = y_pos[name]
+            if residual_Q[name] > 0.1:  # Αν έχει απομείνει ανικανοποίητο φορτίο
+                if s["type"] == "Cold":
+                    ax_grid.plot(s["Tout"], y, marker="o", color="darkred", markersize=12, zorder=5)
+                else:
+                    ax_grid.plot(s["Tout"], y, marker="o", color="dodgerblue", markersize=12, zorder=5)
 
         # 4. Σχεδίαση της διακεκομμένης γραμμής Pinch
         if isinstance(pinch_hot, float):
